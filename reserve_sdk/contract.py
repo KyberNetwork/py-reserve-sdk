@@ -149,6 +149,25 @@ class ReserveContract(BaseContract):
         """
         raise NotImplementedError
 
+    def set_contracts(self, network, rates, sanity_rates):
+        """Update relevant address to reserve.
+        Args:
+            network: the address of KyberNetwork
+            rates: the address of conversions rates contract
+            sanity_rates: the address of sanity rates contract
+        """
+        return self.contract.functions.setContracts(
+            network, rates, sanity_rates).transact()
+
+    def get_sanity_rates_address(self):
+        return self.contract.functions.sanityRatesContract().call()
+
+    def get_network_address(self):
+        return self.contract.functions.kyberNetwork().call()
+
+    def get_conversion_rates_address(self):
+        return self.contract.functions.conversionRatesContract().call()
+
 
 class ConversionRatesContract(BaseContract):
     """ConversionRatesContract represents the KyberNetwork conversion rates
@@ -198,6 +217,13 @@ class ConversionRatesContract(BaseContract):
         """
         raise NotImplementedError
 
+    def set_reserve_address(self, reserve_addr):
+        """Update reserve address."""
+        return self.contract.functions.setReserveAddress(reserve_addr).transact()
+
+    def get_reserve_address(self):
+        return self.contract.functions.reserveContract().call()
+
 
 class SanityRatesContract(BaseContract):
     """SanityRatesContract represents the KyberNetwork sanity rates contract.
@@ -230,6 +256,6 @@ class Reserve:
             provider, account, addresses.reserve)
         self.conversion_rates_contract = ConversionRatesContract(
             provider, account, addresses.conversion_rates)
-        self.sanity_rate = SanityRatesContract(
+        self.sanity_rate_contract = SanityRatesContract(
             provider, account, addresses.sanity_rates
         )
