@@ -2,7 +2,7 @@ import time
 
 from web3 import Web3
 
-from .contract_code import RESERVE_CODE, CONVERSION_RATES_CODE
+from .contract_code import RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE
 from .addresses import Addresses
 
 
@@ -13,6 +13,8 @@ class Deployer:
         """Create a deployer instance given a provider.
         """
         self.__w3 = Web3(provider)
+        self.__w3.eth.accounts.append(account)
+        self.__w3.eth.defaultAccount = account.address
         self.__acct = account
 
     def deploy(self, network_addr):
@@ -42,7 +44,30 @@ class Deployer:
                            self.__acct.address]
         )
 
-        return Addresses(reserve_addr, conversion_rates_addr, '')
+        sanity_rates_addr = self.__deploy_contract(
+            abi=SANITY_RATES_CODE.abi,
+            bytecode=SANITY_RATES_CODE.bin,
+            contract_args=[self.__acct.address]
+        )
+
+        """
+        TODO
+        Reserve
+        - Whitelist deposit address: reserve approve withdraw address
+        - Set permissions
+        Rates:
+        - Add token to conversion_rates_addr
+        - Set valid duration block
+        - Set reserve address
+        - Set control info
+        - Enable token trade
+        - Add temporary operator
+        - Set imbalance function to 0
+        - Remove temporary operator
+        - Set permissions
+
+        """
+        return Addresses(reserve_addr, conversion_rates_addr, sanity_rates_addr)
 
     def __deploy_contract(self, abi, bytecode, contract_args):
         """Deploy a single smart contract
@@ -51,24 +76,8 @@ class Deployer:
             bytecode: contract's bytecode
             contract_args: arguments to construct the contract
         Returns: the deployed smart contract address
-        TODO:
-            - estimate gas
-            - generate gas price
         """
         contract = self.__w3.eth.contract(abi=abi, bytecode=bytecode)
-        data = contract.constructor(*contract_args).buildTransaction({
-            'from': self.__acct.address,
-            'nonce': self.__w3.eth.getTransactionCount(self.__acct.address),
-            'gas': 4000000,
-            'gasPrice': self.__w3.toWei('21', 'gwei')
-        })
-        signed = self.__acct.signTransaction(data)
-        tx_hash = self.__w3.eth.sendRawTransaction(signed.rawTransaction)
-
-        # Wait for transaction receipt.
-        while True:
-            tx_receipt = self.__w3.eth.getTransactionReceipt(tx_hash)
-            if tx_receipt:
-                return tx_receipt['contractAddress']
-            else:
-                time.sleep(1)
+        tx_hash = contract.constructor(*contract_args).transact()
+        tx_receipt = self.__w3.eth.waitForTransactionReceipt(tx_hash)
+        return tx_receipt['contractAddress']
