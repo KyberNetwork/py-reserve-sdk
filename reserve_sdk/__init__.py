@@ -1,2 +1,3 @@
 from .deployer import Deployer
-from .contract import ReserveContract, ConversionRatesContract, SanityRatesContract, Reserve
+from .contract import (
+    ReserveContract, ConversionRatesContract, SanityRatesContract, Reserve)

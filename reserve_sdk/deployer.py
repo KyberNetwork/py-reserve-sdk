@@ -2,7 +2,8 @@ import time
 
 from web3 import Web3
 
-from .contract_code import RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE
+from .contract_code import (
+    RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
 from .addresses import Addresses
 from .contract import Reserve
 
