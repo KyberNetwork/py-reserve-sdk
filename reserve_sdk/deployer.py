@@ -2,8 +2,10 @@ import time
 
 from web3 import Web3
 
-from .contract_code import RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE
+from .contract_code import (
+    RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
 from .addresses import Addresses
+from .contract import Reserve
 
 
 class Deployer:
@@ -12,6 +14,7 @@ class Deployer:
     def __init__(self, provider, account):
         """Create a deployer instance given a provider.
         """
+        self.__provider = provider
         self.__w3 = Web3(provider)
         self.__w3.eth.accounts.append(account)
         self.__w3.eth.defaultAccount = account.address
@@ -50,6 +53,12 @@ class Deployer:
             contract_args=[self.__acct.address]
         )
 
+        addresses = Addresses(
+            reserve_addr,
+            conversion_rates_addr,
+            sanity_rates_addr
+        )
+
         """
         TODO
         Reserve
@@ -58,16 +67,25 @@ class Deployer:
         Rates:
         - Add token to conversion_rates_addr
         - Set valid duration block
-        - Set reserve address
+        - Set reserve address [DONE]
         - Set control info
         - Enable token trade
         - Add temporary operator
         - Set imbalance function to 0
         - Remove temporary operator
         - Set permissions
-
         """
-        return Addresses(reserve_addr, conversion_rates_addr, sanity_rates_addr)
+
+        # Link addresses between reserve contracts
+        reserve = Reserve(self.__provider, self.__acct, addresses)
+        reserve.conversion_rates_contract.set_reserve_address(reserve_addr)
+        reserve.reserve_contract.set_contracts(
+            network_addr,
+            conversion_rates_addr,
+            sanity_rates_addr
+        )
+
+        return addresses
 
     def __deploy_contract(self, abi, bytecode, contract_args):
         """Deploy a single smart contract

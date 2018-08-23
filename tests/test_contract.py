@@ -20,7 +20,7 @@ for key in backend.account_keys:
 deployer, admin_1, admin_2, operator, alerter = test_accts[:5]
 
 # deploy reserve contracts
-d = Deployer(provider, deployer)    
+d = Deployer(provider, deployer)
 addresses = d.deploy(NETWORK_ADDR)
 reserve = Reserve(provider, deployer, addresses)
 
@@ -28,7 +28,7 @@ reserve = Reserve(provider, deployer, addresses)
 class TestBaseContract(unittest.TestCase):
 
     def setUp(self):
-        self.contract = reserve.sanity_rate
+        self.contract = reserve.reserve_contract
         self.deployer = deployer
 
     def test_contract_admin_is_sender(self):
@@ -36,7 +36,7 @@ class TestBaseContract(unittest.TestCase):
 
     def test_contract_pending_admin(self):
         self.assertNotEqual(self.contract.pending_admin(), '')
-    
+
     def test_get_contract_operators(self):
         self.assertEqual(type(self.contract.operators()), list)
 
@@ -44,8 +44,8 @@ class TestBaseContract(unittest.TestCase):
         self.assertEqual(type(self.contract.alerters()), list)
 
     def test_transfer_admin(self):
-        self.contract.transfer_admin(admin_1.address)
-        self.assertIn(admin_1.address, self.contract.pending_admin())
+        self.contract.transfer_admin(admin_2.address)
+        self.assertIn(admin_2.address, self.contract.pending_admin())
 
     def test_claim_admin(self):
         """
@@ -82,7 +82,7 @@ class TestBaseContract(unittest.TestCase):
         self.contract.remove_alerter(alerter.address)
         self.assertNotIn(alerter.address, self.contract.alerters())
 
-# @unittest.skip('tmp')
+
 class TestReserveContract(unittest.TestCase):
 
     def setUp(self):
@@ -96,3 +96,41 @@ class TestReserveContract(unittest.TestCase):
         eth_addr = Web3.toChecksumAddress(
             '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')
         self.assertEqual(self.contract.get_balance(eth_addr), 0)
+
+    def test_link_with_new_contract_addresses(self):
+        new_addresses = d.deploy(NETWORK_ADDR)
+
+        self.contract.set_contracts(
+            NETWORK_ADDR,
+            new_addresses.conversion_rates,
+            new_addresses.sanity_rates
+        )
+
+        self.assertEqual(
+            self.contract.get_network_address(),
+            NETWORK_ADDR
+        )
+        self.assertEqual(
+            self.contract.get_conversion_rates_address(),
+            new_addresses.conversion_rates
+        )
+        self.assertEqual(
+            self.contract.get_sanity_rates_address(),
+            new_addresses.sanity_rates
+        )
+
+
+class TestConversionRatesContract(unittest.TestCase):
+
+    def setUp(self):
+        self.contract = reserve.conversion_rates_contract
+        self.deployer = deployer
+
+    def test_link_with_new_reserve_contract(self):
+        new_address = d.deploy(NETWORK_ADDR)
+
+        self.contract.set_reserve_address(new_address.reserve)
+        self.assertEqual(
+            self.contract.get_reserve_address(),
+            new_address.reserve
+        )
