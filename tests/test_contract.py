@@ -1,9 +1,13 @@
 import unittest
+import json
+import os
 
 from eth_tester import EthereumTester, PyEVMBackend
 from web3 import Web3, EthereumTesterProvider
 
 from reserve_sdk import Deployer, ReserveContract, Reserve
+from reserve_sdk.utils import deploy_contract
+from reserve_sdk.contract_code import ContractCode
 
 
 NETWORK_ADDR = '0x91a502C678605fbCe581eae053319747482276b9'
@@ -23,6 +27,26 @@ deployer, admin_1, admin_2, operator, alerter = test_accts[:5]
 d = Deployer(provider, deployer)
 addresses = d.deploy(NETWORK_ADDR)
 reserve = Reserve(provider, deployer, addresses)
+
+# deploy test token, transfer to reserve
+token_code_file_path = os.path.join(os.path.dirname(__file__),
+                                    'erc20_token_code.json')
+
+with open(token_code_file_path) as f:
+    token_code = json.load(f)
+    erc20_token_code = ContractCode(
+        abi=token_code['abi'], bin=token_code['bytecode'])
+
+erc20_token_addr = deploy_contract(
+    w3,
+    deployer,
+    erc20_token_code,
+    ['TestToken', 'TST', 18]
+)
+
+token_contract = w3.eth.contract(
+    address=erc20_token_addr, abi=erc20_token_code.abi)
+token_contract.functions.transfer(addresses.reserve, 1000).transact()
 
 
 class TestBaseContract(unittest.TestCase):
@@ -49,9 +73,10 @@ class TestBaseContract(unittest.TestCase):
 
     def test_claim_admin(self):
         """
-        Deployer is the current admin. This test will transfer admin to admin_1,
-        check if admin_1 in pending admin. Then admin_1 claim admin to be the
-        contract admin. At last, the admin_1 transfer admin back to deployer.
+        Deployer is the current admin.
+        This test will transfer admin to admin_1, check if admin_1 in pending
+        admin. Then admin_1 claim admin to be the contract admin.
+        At last, the admin_1 transfer admin back to deployer.
         """
         self.contract.transfer_admin(admin_1.address)
         self.assertIn(admin_1.address, self.contract.pending_admin())
@@ -89,13 +114,8 @@ class TestReserveContract(unittest.TestCase):
         self.contract = reserve.reserve_contract
         self.deployer = deployer
 
-    def test_reserve_contract_disable_trade_by_default(self):
-        self.assertIs(self.contract.trade_enabled(), None)
-
-    def test_reserve_have_no_eth(self):
-        eth_addr = Web3.toChecksumAddress(
-            '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')
-        self.assertEqual(self.contract.get_balance(eth_addr), 0)
+    def test_get_balance(self):
+        self.assertIsInstance(self.contract.get_balance(erc20_token_addr), int)
 
     def test_link_with_new_contract_addresses(self):
         new_addresses = d.deploy(NETWORK_ADDR)
@@ -118,6 +138,49 @@ class TestReserveContract(unittest.TestCase):
             self.contract.get_sanity_rates_address(),
             new_addresses.sanity_rates
         )
+
+    def test_approve_and_disapprove_withdraw_address(self):
+        # Check the operator is not approved to withdraw token yet.
+        self.assertFalse(self.contract.approved_withdraw_addresses(
+            operator.address, erc20_token_addr
+        ))
+        self.contract.approve_withdraw_address(
+            operator.address, erc20_token_addr
+        )
+        self.assertTrue(self.contract.approved_withdraw_addresses(
+            operator.address, erc20_token_addr
+        ))
+        self.contract.disapprove_withdraw_address(
+            operator.address, erc20_token_addr
+        )
+        self.assertFalse(self.contract.approved_withdraw_addresses(
+            operator.address, erc20_token_addr
+        ))
+
+    def test_withdraw_token_from_reserve(self):
+        blc = token_contract.functions.balanceOf(operator.address).call()
+        self.contract.approve_withdraw_address(
+            operator.address, erc20_token_addr
+        )
+        # Only contract operator can withdraw token.
+        self.contract.add_operator(operator.address)
+        self.contract.change_account(operator)
+        tx = self.contract.withdraw(erc20_token_addr, 10, operator.address)
+        new_blc = token_contract.functions.balanceOf(operator.address).call()
+        self.assertEqual(new_blc, blc + 10)
+
+    def test_enable_trade_by_contract_admin(self):
+        self.assertFalse(self.contract.trade_enabled())
+        self.contract.enable_trade()
+        self.assertTrue(self.contract.trade_enabled())
+
+    def test_disable_trade_by_alerter(self):
+        # Only contract alerter can disable trade function.
+        self.contract.add_alerter(alerter.address)
+        self.contract.change_account(alerter)
+        self.contract.disable_trade()
+        self.assertFalse(self.contract.trade_enabled())
+        self.contract.change_account(deployer)
 
 
 class TestConversionRatesContract(unittest.TestCase):
