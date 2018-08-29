@@ -28,9 +28,7 @@ def deploy_contract(w3, account, contract_code, contract_args):
         abi=contract_code.abi,
         bytecode=contract_code.bin
     )
-    tx = contract.constructor(*contract_args).buildTransaction({
-        'gasPrice': w3.toWei(50, 'gwei')
-    })
+    tx = contract.constructor(*contract_args).buildTransaction()
     tx_hash = send_transaction(w3, account, tx)
     tx_receipt = get_transaction_receipt(w3, tx_hash)
     return tx_receipt['contractAddress']

@@ -220,7 +220,12 @@ class ConversionRatesContract(BaseContract):
             token: token address
             qty: the amount to buy
         """
-        raise NotImplementedError
+        return self.contract.functions.getRate(
+            token,
+            self.w3.eth.blockNumber,  # most recent block
+            True,  # buy = True
+            qty
+        ).call()
 
     def get_sell_rate(self, token, qty):
         """Return the selling rate (ETH based). The rate might be vary with
@@ -230,23 +235,101 @@ class ConversionRatesContract(BaseContract):
             token: token address
             qty: the amount of token to sell
         """
-        raise NotImplementedError
+        return self.contract.functions.getRate(
+            token,
+            self.w3.eth.blockNumber,  # most recent block
+            False,  # buy = false -> sell
+            qty
+        ).call()
 
-    def set_buy_rate(self, token, rate):
-        """Place the buying rate for given token.
+    def set_rates(self, token_addresses, buy_rates, sell_rates):
+        """Setting rates for tokens.
         Args:
-            token: the token address
-            rate: new rate to set
-        """
-        raise NotImplementedError
+            token_addresses: list of token contract addresses supported by your
+            reserve
 
-    def set_sell_rate(self, token, rate):
-        """Place the selling rate for given token.
-        Args:
-            token: the token address
-            rate: new rate to set
+            buy_rates: list of buy rates in token wei
+                eg: 1 ETH = 500 KNC -> 500 * (10**18)
+
+            sell_rates: list of sell rates in token wei
+                eg: 1 KNC = 0.00182 ETH -> 0.00182 * (10**18)
         """
-        raise NotImplementedError
+        tx = self.contract.functions.setBaseRate(
+            token_addresses,
+            buy_rates,  # base buy
+            sell_rates,  # base sell
+            [],  # compact data
+            [],  # compact data
+            self.w3.eth.blockNumber,  # most recent block number
+            [],  # indicies
+        ).buildTransaction()
+        return self.send_transaction(tx)
+
+    def get_basic_rate(self, token_addresses, buy=True):
+        return self.contract.functions.getBasicRate(
+            token_addresses, buy).call()
+
+    def enable_token_trade(self, token):
+        tx = self.contract.functions.enableTokenTrade(token).buildTransaction()
+        return self.send_transaction(tx)
+
+    def disable_token_trade(self, token):
+        tx = self.contract.functions.disableTokenTrade(
+            token).buildTransaction()
+        return self.send_transaction(tx)
+
+    def add_token(self, token):
+        tx = self.contract.functions.addToken(token).buildTransaction()
+        return self.send_transaction(tx)
+
+    def set_valid_rate_duration_in_blocks(self, duration):
+        tx = self.contract.functions.setValidRateDurationInBlocks(
+            duration
+        ).buildTransaction()
+        return self.send_transaction(tx)
+
+    def set_token_control_info(self,
+                               token,
+                               minimal_record_resolution,
+                               max_per_block_imbalance,
+                               max_total_imbalance):
+
+        tx = self.contract.functions.setTokenControlInfo(
+            token,
+            minimal_record_resolution,
+            max_per_block_imbalance,
+            max_total_imbalance
+        ).buildTransaction()
+        return self.send_transaction(tx)
+
+    def set_qty_step_function(self, token, x_buy, y_buy, x_sell, y_sell):
+        tx = self.contract.functions.setQtyStepFunction(
+            token,
+            x_buy,
+            y_buy,
+            x_sell,
+            y_sell
+        ).buildTransaction({'gas': 5000000})
+        return self.send_transaction(tx)
+
+    def set_imbalance_step_function(self, token, x_buy, y_buy, x_sell, y_sell):
+        tx = self.contract.functions.setImbalanceStepFunction(
+            token,
+            x_buy,
+            y_buy,
+            x_sell,
+            y_sell
+        ).buildTransaction({'gas': 5000000})
+        return self.send_transaction(tx)
+
+    def set_compact_data(self, buy, sell, indices):
+        tx = self.contract.functions.setCompactData(
+            buy,
+            sell,
+            self.w3.eth.blockNumber,
+            indices
+        ).buildTransaction({'gas': 5000000})
+        return self.send_transaction(tx)
 
     def set_reserve_address(self, reserve_addr):
         """Update reserve address."""
@@ -256,6 +339,38 @@ class ConversionRatesContract(BaseContract):
 
     def get_reserve_address(self):
         return self.contract.functions.reserveContract().call()
+
+    def get_step_function_data(self, token, command, param):
+        return self.contract.functions.getStepFunctionData(
+            token,
+            command,
+            param
+        ).call()
+
+    def add_new_token(self, token, minimal_record_resolution,
+                      max_per_block_imbalance, max_total_imbalance):
+        """Add new token to pricing contract.
+
+        Args:
+            token: the token address.
+            minimal_record_resolution: recommended value is the token unit
+            equivalent of $0.0001
+            max_per_block_imbalance: the maximum token wei amount of
+            net absolute (+/-) change for a token in a block
+            max_total_imbalance: the token amount of the net token change that
+            happens between 2 prices updates
+
+        Steps:
+            1. Add token address to pricing contract.
+            2. Set token control info .
+            3. Enable token trade.
+        """
+        self.add_token(token)
+        self.set_token_control_info(
+            token, minimal_record_resolution,
+            max_per_block_imbalance, max_total_imbalance
+        )
+        self.enable_token_trade(token)
 
 
 class SanityRatesContract(BaseContract):
