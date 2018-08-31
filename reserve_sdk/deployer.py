@@ -6,6 +6,7 @@ from .contract_code import (
     RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
 from .addresses import Addresses
 from .contract import Reserve
+from .utils import send_transaction, get_transaction_receipt, deploy_contract
 
 
 class Deployer:
@@ -16,7 +17,6 @@ class Deployer:
         """
         self.__provider = provider
         self.__w3 = Web3(provider)
-        self.__w3.eth.accounts.append(account)
         self.__w3.eth.defaultAccount = account.address
         self.__acct = account
 
@@ -33,24 +33,25 @@ class Deployer:
             addresses: deployed reserve addresses set.
         """
 
-        conversion_rates_addr = self.__deploy_contract(
-            abi=CONVERSION_RATES_CODE.abi,
-            bytecode=CONVERSION_RATES_CODE.bin,
-            contract_args=[self.__acct.address]
+        conversion_rates_addr = deploy_contract(
+            self.__w3,
+            self.__acct,
+            CONVERSION_RATES_CODE,
+            [self.__acct.address]
         )
 
-        reserve_addr = self.__deploy_contract(
-            abi=RESERVE_CODE.abi,
-            bytecode=RESERVE_CODE.bin,
-            contract_args=[network_addr,
-                           conversion_rates_addr,
-                           self.__acct.address]
+        reserve_addr = deploy_contract(
+            self.__w3,
+            self.__acct,
+            RESERVE_CODE,
+            [network_addr, conversion_rates_addr, self.__acct.address]
         )
 
-        sanity_rates_addr = self.__deploy_contract(
-            abi=SANITY_RATES_CODE.abi,
-            bytecode=SANITY_RATES_CODE.bin,
-            contract_args=[self.__acct.address]
+        sanity_rates_addr = deploy_contract(
+            self.__w3,
+            self.__acct,
+            SANITY_RATES_CODE,
+            [self.__acct.address]
         )
 
         addresses = Addresses(
@@ -77,6 +78,7 @@ class Deployer:
         """
 
         # Link addresses between reserve contracts
+        # Consider to move this part to Reserve class
         reserve = Reserve(self.__provider, self.__acct, addresses)
         reserve.conversion_rates_contract.set_reserve_address(reserve_addr)
         reserve.reserve_contract.set_contracts(
@@ -86,16 +88,3 @@ class Deployer:
         )
 
         return addresses
-
-    def __deploy_contract(self, abi, bytecode, contract_args):
-        """Deploy a single smart contract
-        Args:
-            abi: contract's abi
-            bytecode: contract's bytecode
-            contract_args: arguments to construct the contract
-        Returns: the deployed smart contract address
-        """
-        contract = self.__w3.eth.contract(abi=abi, bytecode=bytecode)
-        tx_hash = contract.constructor(*contract_args).transact()
-        tx_receipt = self.__w3.eth.waitForTransactionReceipt(tx_hash)
-        return tx_receipt['contractAddress']
