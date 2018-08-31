@@ -2,15 +2,17 @@ import unittest
 import json
 import os
 from functools import wraps
+import random
 
 from eth_tester import EthereumTester, PyEVMBackend
 from web3 import Web3, EthereumTesterProvider
 
 from reserve_sdk import Deployer, ReserveContract, Reserve
-from reserve_sdk.utils import deploy_contract
+from reserve_sdk.utils import deploy_contract, token_wei
 from reserve_sdk.contract_code import ContractCode
 from reserve_sdk.token import Token
 
+random.seed(0)
 
 NETWORK_ADDR = '0x91a502C678605fbCe581eae053319747482276b9'
 
@@ -215,16 +217,16 @@ class TestConversionRatesContract(unittest.TestCase):
         reserve.conversion_rates_contract.set_valid_rate_duration_in_blocks(60)
         reserve.conversion_rates_contract.add_new_token(
             token=tokens[0].address,
-            minimal_record_resolution=int(0.0001 * 10**18),
-            max_per_block_imbalance=int(439.79 * 10**18),
-            max_total_imbalance=int(922.36 * 10**18)
+            minimal_record_resolution=token_wei(0.0001, 18),
+            max_per_block_imbalance=token_wei(439.79, 18),
+            max_total_imbalance=token_wei(922.36, 18)
         )
 
         reserve.conversion_rates_contract.add_new_token(
             token=tokens[1].address,
-            minimal_record_resolution=int(0.0001 * 10**18),
-            max_per_block_imbalance=int(439.79 * 10**18),
-            max_total_imbalance=int(922.36 * 10**18)
+            minimal_record_resolution=token_wei(0.0001, 18),
+            max_per_block_imbalance=token_wei(439.79, 18),
+            max_total_imbalance=token_wei(922.36, 18)
         )
 
     def setUp(self):
@@ -246,8 +248,8 @@ class TestConversionRatesContract(unittest.TestCase):
 
         # set token base rates
         token_addresses = [token_1.address, token_2.address]
-        buy_rates = [500 * 10**18, 400 * 10**18]
-        sell_rates = [182 * 10**18, 232 * 10**18]
+        buy_rates = [token_wei(500, 18), token_wei(400, 18)]
+        sell_rates = [token_wei(0.00182, 18), token_wei(0.00232, 18)]
         self.contract.set_rates(token_addresses, buy_rates, sell_rates)
 
         self.assertEqual(
@@ -397,8 +399,8 @@ class TestConversionRatesContract(unittest.TestCase):
 
         self.contract.set_rates(
             token_addresses=[token.address],
-            buy_rates=[500 * 10**18],
-            sell_rates=[182 * 10**18]
+            buy_rates=[token_wei(500, 18)],
+            sell_rates=[token_wei(0.00182, 18)]
         )
         self.contract.set_qty_step_function(
             token=token.address,
@@ -414,23 +416,159 @@ class TestConversionRatesContract(unittest.TestCase):
         # get sell rate, need to pass token qty
         self.assertEqual(
             self.contract.get_sell_rate(token.address, qty=(90 * 10**18)),
-            182 * 10**18
+            token_wei(0.00182, 18)
         )
         self.assertEqual(
             self.contract.get_sell_rate(token.address, qty=(150 * 10**18)),
-            182 * 10**18 * (1 - 30 * 0.01 / 100)
+            token_wei(0.00182, 18) * (1 - 30 * 0.01 / 100)
         )
 
         # get sell rate, need to pass eth qty
         self.assertEqual(
             self.contract.get_buy_rate(token.address, qty=int(0.1 * 10**18)),
-            500 * 10**18
+            token_wei(500, 18)
         )
         self.assertEqual(
             self.contract.get_buy_rate(token.address, qty=int(0.3 * 10**18)),
-            500 * 10**18 * (1 - 30 * 0.01 / 100)
+            token_wei(500, 18) * (1 - 30 * 0.01 / 100)
         )
 
     @unittest.skip('need to perform trade action')
     def test_rate_with_imbalance_step_function(self):
         pass
+
+    @role(operator)
+    def test_compact_data(self):
+        """
+        Set rate
+        Set new_rate = rate * (1 + changes / 1000)
+        (changes is in range -128...127 bps, 1 bps = 0.01%)
+
+        Expect:
+            compact_data = changes
+            basic_rate = previous_rate
+            rate = new_rate
+        """
+        token = tokens[0]
+
+        # set rates -> consider as base rates
+        token_addresses = [token.address]
+        base_buy_rates = [token_wei(500, 18)]
+        base_sell_rates = [token_wei(0.00182, 18)]
+
+        self.contract.set_rates(
+            token_addresses, base_buy_rates, base_sell_rates
+        )
+
+        buy_changes = [random.randint(-128, 127) for _ in base_buy_rates]
+        sell_changes = [random.randint(-128, 127) for _ in base_sell_rates]
+        new_buy_rates = [
+            int(rate * (1 + changes / 1000)) for rate, changes in
+            zip(base_buy_rates, buy_changes)
+        ]
+        new_sell_rates = [
+            int(rate * (1 + changes / 1000)) for rate, changes in
+            zip(base_sell_rates, sell_changes)
+        ]
+
+        self.contract.set_rates(token_addresses, new_buy_rates, new_sell_rates)
+
+        """Check base rates"""
+        self.assertEqual(
+            self.contract.get_basic_rate(token.address, buy=True),
+            base_buy_rates[0]
+        )
+        self.assertEqual(
+            self.contract.get_basic_rate(token.address, buy=False),
+            base_sell_rates[0]
+        )
+
+        """Check compact rates"""
+        _, _, compact_buy, compact_sell = self.contract.get_compact_data(
+            token.address)
+
+        compact_buy = int.from_bytes(
+            compact_buy, byteorder='little', signed=True
+        )
+        compact_sell = int.from_bytes(
+            compact_sell, byteorder='little', signed=True
+        )
+
+        self.assertLessEqual(abs(compact_buy - buy_changes[0]), 1)
+        self.assertLessEqual(abs(compact_sell - sell_changes[0]), 1)
+
+        """Check rates"""
+        sell = self.contract.get_sell_rate(token.address, 1)
+        buy = self.contract.get_buy_rate(token.address, 1)
+
+        bps = 0.0001 * 10**18  # 1 bps = 0.01%
+
+        self.assertLess(abs((sell-new_sell_rates[0])/new_sell_rates[0]), bps)
+        self.assertLess(abs((buy-new_buy_rates[0])/new_buy_rates[0]), bps)
+
+    @role(operator)
+    def test_set_new_rate(self):
+        """
+        Set rate
+        Set new_rate = rate * (1 + changes / 1000)
+        (changes is out of range -128...127 bps, 1 bps = 0.01%)
+
+        Expect:
+            compact_data = 0
+            basic_rate = new_rate
+            rate = new_rate
+        """
+        token = tokens[0]
+
+        # set rates -> consider as base rates
+        token_addresses = [token.address]
+        base_buy_rates = [token_wei(500, 18)]
+        base_sell_rates = [token_wei(0.00182, 18)]
+
+        self.contract.set_rates(
+            token_addresses, base_buy_rates, base_sell_rates
+        )
+
+        buy_changes = [128 for _ in base_buy_rates]
+        sell_changes = [-129 for _ in base_sell_rates]
+
+        new_buy_rates = [
+            int(rate * (1 + changes / 1000)) for rate, changes in
+            zip(base_buy_rates, buy_changes)
+        ]
+        new_sell_rates = [
+            int(rate * (1 + changes / 1000)) for rate, changes in
+            zip(base_sell_rates, sell_changes)
+        ]
+
+        self.contract.set_rates(token_addresses, new_buy_rates, new_sell_rates)
+
+        """Check base rates"""
+        self.assertEqual(
+            self.contract.get_basic_rate(token.address, buy=True),
+            new_buy_rates[0]
+        )
+        self.assertEqual(
+            self.contract.get_basic_rate(token.address, buy=False),
+            new_sell_rates[0]
+        )
+
+        """Check compact rates"""
+        _, _, compact_buy, compact_sell = self.contract.get_compact_data(
+            token.address)
+
+        compact_buy = int.from_bytes(
+            compact_buy, byteorder='little', signed=True
+        )
+        compact_sell = int.from_bytes(
+            compact_sell, byteorder='little', signed=True
+        )
+
+        self.assertEqual(compact_buy, 0)
+        self.assertEqual(compact_sell, 0)
+
+        """Check full rates"""
+        sell = self.contract.get_sell_rate(token.address, 1)
+        buy = self.contract.get_buy_rate(token.address, 1)
+        self.assertEqual(sell, new_sell_rates[0])
+        self.assertEqual(buy, new_buy_rates[0])

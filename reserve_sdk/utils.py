@@ -1,3 +1,6 @@
+import binascii
+
+
 def send_transaction(w3, account, tx):
     """Sign and send transaction.
     Args:
@@ -32,3 +35,11 @@ def deploy_contract(w3, account, contract_code, contract_args):
     tx_hash = send_transaction(w3, account, tx)
     tx_receipt = get_transaction_receipt(w3, tx_hash)
     return tx_receipt['contractAddress']
+
+
+def hexlify(arr):
+    return '0x{}'.format(binascii.hexlify(bytearray(arr)).decode())
+
+
+def token_wei(value, decimals):
+    return int(value * 10**decimals)

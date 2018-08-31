@@ -1,9 +1,85 @@
+import asyncio as _
+from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor as _
+
 from web3 import Web3
 
 from .contract_code import (
     RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
+from .utils import send_transaction, hexlify
 
-from .utils import send_transaction
+
+"""Show token position in the compact data."""
+TokenIndex = namedtuple('TokenIndex', ('array_idx', 'field_idx'))
+CompactData = namedtuple('CompactData', ('base', 'compact'))
+
+
+def get_compact_data(rate, base):
+    """
+    TODO
+    Calculate compact data from new rate and base rate.
+    Args:
+        rate: value of new sell/buy price
+        base: value of current sell/buy price at contract
+
+    Returns:
+        compact_data which include new base rate & compact value which is the
+        different between rate and base in bps unit.
+
+    TODO consider to raise BaseChangedException to indicates that base rates
+    were changed, in this situation, we can only set base rates, not compact
+    data.
+    """
+    if base == 0:
+        return CompactData(rate, 0)
+
+    compact = int((rate/base - 1) * 1000)
+    if compact <= -128 or compact >= 127:  # not fit in a byte
+        return CompactData(rate, 0)
+    else:
+        # handle negative value to convert to byte
+        if compact < 0:
+            compact += 256
+        return CompactData(base, compact)
+
+
+def build_compact_price(prices, token_indices):
+    """Prepare compact price to setCompactData through pricing contract.
+    Args:
+        prices: price change in bps unit
+        token_indices: index of token in compact data on contract
+    Return:
+        buy: buy prices change in bps unit, encoded in hex
+        sell: sell prices change in bps unit, encoded in hex
+        indices: the index of block token in compact data on contract
+
+    TODO improve function documentation with example.
+    """
+    result = {}
+
+    for p in prices:
+        array_idx = token_indices[p['token']].array_idx
+        field_idx = token_indices[p['token']].field_idx
+
+        if array_idx not in result:
+            result[array_idx] = {
+                'buy': [0] * 14,
+                'sell': [0] * 14
+            }
+
+        result[array_idx]['buy'][field_idx] = p['compact_buy']
+        result[array_idx]['sell'][field_idx] = p['compact_sell']
+
+    buy = []
+    sell = []
+    indices = []
+
+    for k, v in result.items():
+        buy.append(hexlify(v['buy']))
+        sell.append(hexlify(v['sell']))
+        indices.append(k)
+
+    return buy, sell, indices
 
 
 class BaseContract:
@@ -211,6 +287,7 @@ class ConversionRatesContract(BaseContract):
             address: the address of smart contract
         """
         super().__init__(provider, account, address, CONVERSION_RATES_CODE.abi)
+        self.token_indices = {}
 
     def get_buy_rate(self, token, qty):
         """Return the buying rate (ETH based). The rate might be vary with
@@ -238,9 +315,53 @@ class ConversionRatesContract(BaseContract):
         return self.contract.functions.getRate(
             token,
             self.w3.eth.blockNumber,  # most recent block
-            False,  # buy = false -> sell
+            False,  # buy = False -> sell
             qty
         ).call()
+
+    def get_token_indices(self, token):
+        """Get token index in pricing contract compact data.
+        Args:
+            token: the token address
+        Returns array index and field index of token in compact data.
+        """
+        if token not in self.token_indices:
+            arr_idx, field_idx, _, _ = self.contract.functions.getCompactData(
+                token).call()
+            self.token_indices[token] = TokenIndex(arr_idx, field_idx)
+        return self.token_indices[token]
+
+    def build_price(self, token, buy, sell):
+        """Calculate price data.
+        Args:
+            token: the token address
+            buy: token buy price
+            sell: token sell price
+        Returns:
+            token: the token address # TODO consider to remove this output
+            compact_buy: the different between current current base buy and new
+            buy price, in bps unit
+            compact_sell: the different between current current base sell and
+            new sell price, in bps unit
+            base_changed: this value is True if compact cant fit in a byte, in
+            that situation, need to set new base rate. Otherwise, the compact
+            price will be set.
+        """
+        base_buy = self.get_basic_rate(token, True)
+        compact_buy = get_compact_data(buy, base_buy)
+
+        base_sell = self.get_basic_rate(token, False)
+        compact_sell = get_compact_data(sell, base_sell)
+
+        base_changed = (compact_buy.base != base_buy) or (
+            compact_sell.base != base_sell)
+
+        return {
+            'token': token,
+            'compact_buy': compact_buy.compact,
+            'compact_sell': compact_sell.compact,
+            'base_changed': base_changed
+        }
 
     def set_rates(self, token_addresses, buy_rates, sell_rates):
         """Setting rates for tokens.
@@ -253,21 +374,73 @@ class ConversionRatesContract(BaseContract):
 
             sell_rates: list of sell rates in token wei
                 eg: 1 KNC = 0.00182 ETH -> 0.00182 * (10**18)
+
+        Steps:
+            get token_indices
+            build prices
+
+            if base_change:
+                set new base_rate
+            else
+                set compact_data
+
+            base_change if
+            - no base_change exist
+            - compact data not fit in a byte, out of range -128...127 bps
+
+        TODO improve performance to get token_indices and prices concurrently.
         """
-        tx = self.contract.functions.setBaseRate(
-            token_addresses,
-            buy_rates,  # base buy
-            sell_rates,  # base sell
-            [],  # compact data
-            [],  # compact data
-            self.w3.eth.blockNumber,  # most recent block number
-            [],  # indicies
-        ).buildTransaction()
+
+        # loop = asyncio.get_event_loop()
+
+        # token_indices = loop.run_until_complete(asyncio.gather(
+        #     *[self.get_token_indices(token) for token in token_addresses]
+        # ))
+
+        # prices = loop.run_until_complete(asyncio.gather(
+        #     *[self.build_price(token, buy, sell) for token, buy, sell in
+        #       zip(token_addresses, buy_rates, sell_rates)]
+        # ))
+
+        # loop.close()
+
+        token_indices = {
+            token: self.get_token_indices(token) for token in token_addresses
+        }
+
+        prices = [
+            self.build_price(token, buy, sell) for token, buy, sell in
+            zip(token_addresses, buy_rates, sell_rates)
+        ]
+
+        base_changed = any([p['base_changed'] for p in prices])
+
+        if base_changed:
+            """Set base rate"""
+            tx = self.contract.functions.setBaseRate(
+                token_addresses,
+                buy_rates,  # base buy
+                sell_rates,  # base sell
+                [],  # compact data
+                [],  # compact data
+                self.w3.eth.blockNumber,  # most recent block number
+                [],  # indicies
+            ).buildTransaction()
+        else:
+            """Set compact rate"""
+            buy, sell, indices = build_compact_price(prices, token_indices)
+            tx = self.contract.functions.setCompactData(
+                buy,
+                sell,
+                self.w3.eth.blockNumber,
+                indices
+            ).buildTransaction()
         return self.send_transaction(tx)
 
-    def get_basic_rate(self, token_addresses, buy=True):
+    def get_basic_rate(self, token_address, buy=True):
+        """Get basic rate from pricing contract."""
         return self.contract.functions.getBasicRate(
-            token_addresses, buy).call()
+            token_address, buy).call()
 
     def enable_token_trade(self, token):
         tx = self.contract.functions.enableTokenTrade(token).buildTransaction()
@@ -330,6 +503,9 @@ class ConversionRatesContract(BaseContract):
             indices
         ).buildTransaction({'gas': 5000000})
         return self.send_transaction(tx)
+
+    def get_compact_data(self, token):
+        return self.contract.functions.getCompactData(token).call()
 
     def set_reserve_address(self, reserve_addr):
         """Update reserve address."""
