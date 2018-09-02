@@ -572,3 +572,44 @@ class TestConversionRatesContract(unittest.TestCase):
         buy = self.contract.get_buy_rate(token.address, 1)
         self.assertEqual(sell, new_sell_rates[0])
         self.assertEqual(buy, new_buy_rates[0])
+
+
+class TestSanityRatesContract(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        reserve.sanity_rate_contract.add_operator(operator.address)
+        reserve.sanity_rate_contract.add_alerter(alerter.address)
+
+    def setUp(self):
+        self.contract = reserve.sanity_rate_contract
+
+    @role(operator)
+    def test_set_get_sanity_rates(self):
+        token_addresses = [token.address for token in tokens[:2]]
+        sanity_rates = [Web3.toWei(0.02, 'ether'), Web3.toWei(0.01, 'ether')]
+        self.contract.set_sanity_rates(token_addresses, sanity_rates)
+
+        self.contract.change_account(admin)
+        zero_diff = [0 for _ in token_addresses]
+        self.contract.set_reasonable_diff(token_addresses, zero_diff)
+
+        self.assertEqual(
+            sanity_rates[0],
+            self.contract.get_sanity_rates(
+                src=token_addresses[0],
+                dst=Web3.toChecksumAddress(
+                    '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee')
+            )
+        )
+
+    @role(admin)
+    def test_set_get_reasonable_diff(self):
+        token_addresses = [token.address for token in tokens[:2]]
+        reasonable_diff = [1000, 500]  # 10%, 5%
+        self.contract.set_reasonable_diff(token_addresses, reasonable_diff)
+
+        self.assertEqual(
+            reasonable_diff[0],
+            self.contract.get_reasonable_diff_in_bps(token_addresses[0])
+        )

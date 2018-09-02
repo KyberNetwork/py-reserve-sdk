@@ -1,6 +1,4 @@
-import asyncio as _
 from collections import namedtuple
-from concurrent.futures import ThreadPoolExecutor as _
 
 from web3 import Web3
 
@@ -558,6 +556,39 @@ class SanityRatesContract(BaseContract):
     def __init__(self, provider, account, address):
         """Create new SanityRatesContract instance."""
         super().__init__(provider, account, address, SANITY_RATES_CODE.abi)
+
+    def set_sanity_rates(self, tokens, rates):
+        """Set the sanity rates for a list of tokens.
+        Args:
+            tokens: list of ERC20 token contract address
+            rates: list of rates in ETH wei
+        E.g:
+            1 KNC = 0.002 ETH = 2000000000000000 wei
+        """
+        tx = self.contract.functions.setSanityRates(
+            tokens, rates
+        ).buildTransaction({'gas': 5000000})
+        return self.send_transaction(tx)
+
+    def get_sanity_rates(self, src, dst):
+        """Get the sanity rates for 1 token vs. ETH."""
+        return self.contract.functions.getSanityRate(src, dst).call()
+
+    def set_reasonable_diff(self, tokens, diff):
+        """Set reasonable conversion rate difference in percentage. Any rate
+        outside of this range is considered unreasonable.
+        Args:
+            tokens: list of ERC20 token contract address
+            diff: list of reasonable difference in basis points (1bps = 0.01%)
+        """
+        tx = self.contract.functions.setReasonableDiff(
+            tokens, diff
+        ).buildTransaction()
+        return self.send_transaction(tx)
+
+    def get_reasonable_diff_in_bps(self, token):
+        """Get the reasonable difference in basis points for token."""
+        return self.contract.functions.reasonableDiffInBps(token).call()
 
 
 class Reserve:
