@@ -60,7 +60,14 @@ provider, account::
     >> w3 = Web3(provider)
     >> account = w3.eth.account.privateKeyToAccount('private-key')
 
-    >> addresses = Addresses(reserve_addr, pricing_addr, sanity_addr)
+    >> reserve_contract_addr = '0x...'
+    >> conversion_rates_contract_addr = '0x...'
+    >> sanity_rates_contract_addr = '0x...'
+    >> addresses = Addresses(
+        reserve_contract_addr, 
+        conversion_rates_contract_addr, 
+        sanity_rates_contract_addr
+    )
     >> reserve = Reserve(provider, account, addresses)
 
 Permission
@@ -69,48 +76,49 @@ Permission
 Transfer admin, add/remove operator, alerter::
 
     >> new_admin_addr = '0x...'
-    >> reserve.reserve_contract.transfer_admin(new_admin_addr)
-    >> assert new_admin_addr in reserve.reserve_contract.pending_admin()
+    >> reserve.fund.transfer_admin(new_admin_addr)
+    >> assert new_admin_addr in reserve.fund.pending_admin()
 
     >> operator_addr = '0x...'
-    >> reserve.reserve_contract.add_operator(operator_addr)
-    >> assert operator_addr in reserve.reserve_contract.operators()
+    >> reserve.fund.add_operator(operator_addr)
+    >> assert operator_addr in reserve.fund.operators()
 
     >> alerter_addr = '0x...'
-    >> reserve.reserve_contract.add_alerter(alerter_addr)
-    >> assert alerter_addr in reserve.reserve_contract.alerters()
+    >> reserve.fund.add_alerter(alerter_addr)
+    >> assert alerter_addr in reserve.fund.alerters()
 
 Funding
 +++++++
 
 Check reserve balance::
 
-    >> reserve.reserve_contract.get_balance('erc20_token_addr')
+    >> reserve.fund.get_balance('erc20_token_addr')
 
 Approve/Disapprove to withdraw token from reserve to an address::
 
-    >> reserve.reserve_contract.approve_withdraw_addresses(
+    >> reserve.fund.approve_withdraw_addresses(
         'dst_addr', 'erc20_token_addr')
     
-    >> reserve.reserve_contract.disapprove_withdraw_addresses(
+    >> reserve.fund.disapprove_withdraw_addresses(
         'dst_addr', 'erc20_token_addr')
 
 Checking if an address can receive token from reserve::
 
-    >> assert reserve.reserve_contract.approved_withdraw_address(
+    >> assert reserve.fund.approved_withdraw_address(
         'dst_addr', 'erc20_token_addr')
 
 Withdraw token from reserve, this action should be execute by operator::
 
-    >> reserve.reserve_contract.withdraw(
-        'erc20_token_addr', token_unit, 'dst_addr')
+    >> reserve.fund.withdraw(
+        'erc20_token_addr', token_unit, 'dst_addr'
+    )
 
 Pricing
 +++++++
 
 List new token to your reserve::
 
-    >> reserve.conversion_rates_contract.add_new_token(
+    >> reserve.pricing.add_new_token(
         token='0xdd974D5C2e2928deA5F71b9825b8b646686BD200',  # ERC20: KNC
         minimal_record_resolution=0.0001 * 10**18, # token unit equivalent of $0.0001
         max_per_block_imbalance=439.79 * 10**18, # the maximum of change for a token in a block
@@ -119,7 +127,7 @@ List new token to your reserve::
 
 Set rates::
 
-    >> reserve.conversion_rates_contract.set_rates(
+    >> reserve.pricing.set_rates(
         token_addresses=[
             '0xdd974D5C2e2928deA5F71b9825b8b646686BD200', # KNC
             '0xd26114cd6EE289AccF82350c8d8487fedB8A0C07'  # OMG
@@ -136,7 +144,7 @@ Set rates::
 
 Set quantity step function::
 
-    >> reserve.conversion_rates_contract.set_qty_step_function(
+    >> reserve.pricing.set_qty_step_function(
         ['0xdd974D5C2e2928deA5F71b9825b8b646686BD200'],  # ERC20[]
         [
             100 * 10**18,
@@ -166,7 +174,7 @@ Set quantity step function::
 
 Set imbalance step function::
 
-    >> reserve.conversion_rates_contract.set_imbalance_step_function(
+    >> reserve.pricing.set_imbalance_step_function(
         ['0xdd974D5C2e2928deA5F71b9825b8b646686BD200'],  # ERC20[]
         [
             100 * 10**18,
@@ -199,7 +207,7 @@ Sanity
 
 Set/Get sanity rates::
 
-    >> reserve.sanity_rate_contract.set_sanity_rates(
+    >> reserve.sanity.set_sanity_rates(
         ['0xdd974D5C2e2928deA5F71b9825b8b646686BD200'], # ERC20[]: [KNC token]
         [0.002 * 10**18] # uint[] 1 KNC = 0.002 ETH = 2000000000000000 wei
     )
@@ -211,7 +219,7 @@ Set/Get sanity rates::
 
 Set/Get reasonable difference in basis points::
 
-    >> reserve.sanity_rate_contract.set_reasonable_diff(
+    >> reserve.sanity.set_reasonable_diff(
         ['0xdd974D5C2e2928deA5F71b9825b8b646686BD200'], # ERC20[]: [KNC token]
         [1000] # uint[]: 10% = 1000 bps
     )

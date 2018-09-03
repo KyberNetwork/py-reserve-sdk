@@ -81,8 +81,8 @@ class Deployer:
         # Link addresses between reserve contracts
         # Consider to move this part to Reserve class
         reserve = Reserve(self.__provider, self.__acct, addresses)
-        reserve.conversion_rates_contract.set_reserve_address(reserve_addr)
-        reserve.reserve_contract.set_contracts(
+        reserve.pricing.set_reserve_address(reserve_addr)
+        reserve.fund.set_contracts(
             network_addr,
             conversion_rates_addr,
             sanity_rates_addr

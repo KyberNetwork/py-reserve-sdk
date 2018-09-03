@@ -70,7 +70,7 @@ def role(account):
 class TestBaseContract(unittest.TestCase):
 
     def setUp(self):
-        self.contract = reserve.reserve_contract
+        self.contract = reserve.fund
 
     def test_contract_admin_is_sender(self):
         self.assertEqual(self.contract.admin(), deployer.address)
@@ -129,13 +129,13 @@ class TestReserveContract(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        reserve.reserve_contract.add_operator(operator.address)
-        reserve.reserve_contract.add_alerter(alerter.address)
+        reserve.fund.add_operator(operator.address)
+        reserve.fund.add_alerter(alerter.address)
         for token in tokens:
             token.transfer(addresses.reserve, 5000 * 10**18)
 
     def setUp(self):
-        self.contract = reserve.reserve_contract
+        self.contract = reserve.fund
 
     def test_get_balance(self):
         self.assertIsInstance(
@@ -213,16 +213,16 @@ class TestConversionRatesContract(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        reserve.conversion_rates_contract.add_operator(operator.address)
-        reserve.conversion_rates_contract.set_valid_rate_duration_in_blocks(60)
-        reserve.conversion_rates_contract.add_new_token(
+        reserve.pricing.add_operator(operator.address)
+        reserve.pricing.set_valid_rate_duration_in_blocks(60)
+        reserve.pricing.add_new_token(
             token=tokens[0].address,
             minimal_record_resolution=token_wei(0.0001, 18),
             max_per_block_imbalance=token_wei(439.79, 18),
             max_total_imbalance=token_wei(922.36, 18)
         )
 
-        reserve.conversion_rates_contract.add_new_token(
+        reserve.pricing.add_new_token(
             token=tokens[1].address,
             minimal_record_resolution=token_wei(0.0001, 18),
             max_per_block_imbalance=token_wei(439.79, 18),
@@ -230,7 +230,7 @@ class TestConversionRatesContract(unittest.TestCase):
         )
 
     def setUp(self):
-        self.contract = reserve.conversion_rates_contract
+        self.contract = reserve.pricing
 
     @role(deployer)
     def test_link_with_new_reserve_contract(self):
@@ -578,11 +578,11 @@ class TestSanityRatesContract(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        reserve.sanity_rate_contract.add_operator(operator.address)
-        reserve.sanity_rate_contract.add_alerter(alerter.address)
+        reserve.sanity.add_operator(operator.address)
+        reserve.sanity.add_alerter(alerter.address)
 
     def setUp(self):
-        self.contract = reserve.sanity_rate_contract
+        self.contract = reserve.sanity
 
     @role(operator)
     def test_set_get_sanity_rates(self):

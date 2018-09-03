@@ -33,20 +33,20 @@ class TestDeployer(unittest.TestCase):
 
         # linked address in reserve contract
         self.assertEqual(
-            reserve.reserve_contract.get_network_address(),
+            reserve.fund.get_network_address(),
             NETWORK_ADDR
         )
         self.assertEqual(
-            reserve.reserve_contract.get_conversion_rates_address(),
+            reserve.fund.get_conversion_rates_address(),
             self.addresses.conversion_rates
         )
         self.assertEqual(
-            reserve.reserve_contract.get_sanity_rates_address(),
+            reserve.fund.get_sanity_rates_address(),
             self.addresses.sanity_rates
         )
 
         # linked address in conversion rates contract
         self.assertEqual(
-            reserve.conversion_rates_contract.get_reserve_address(),
+            reserve.pricing.get_reserve_address(),
             self.addresses.reserve
         )

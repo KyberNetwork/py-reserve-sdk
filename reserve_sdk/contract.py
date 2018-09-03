@@ -639,10 +639,10 @@ class Reserve:
             addresses: addresses of deployed smart contracts
 
         """
-        self.reserve_contract = ReserveContract(
+        self.fund = ReserveContract(
             provider, account, addresses.reserve)
-        self.conversion_rates_contract = ConversionRatesContract(
+        self.pricing = ConversionRatesContract(
             provider, account, addresses.conversion_rates)
-        self.sanity_rate_contract = SanityRatesContract(
+        self.sanity = SanityRatesContract(
             provider, account, addresses.sanity_rates
         )
