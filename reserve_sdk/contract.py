@@ -14,8 +14,8 @@ CompactData = namedtuple('CompactData', ('base', 'compact'))
 
 def get_compact_data(rate, base):
     """
-    TODO
     Calculate compact data from new rate and base rate.
+
     Args:
         rate: value of new sell/buy price
         base: value of current sell/buy price at contract
@@ -43,9 +43,11 @@ def get_compact_data(rate, base):
 
 def build_compact_price(prices, token_indices):
     """Prepare compact price to setCompactData through pricing contract.
+
     Args:
         prices: price change in bps unit
         token_indices: index of token in compact data on contract
+
     Return:
         buy: buy prices change in bps unit, encoded in hex
         sell: sell prices change in bps unit, encoded in hex
@@ -113,8 +115,10 @@ class BaseContract:
 
     def transfer_admin(self, address):
         """Transfer admin privilege to given address.
+
         Args:
             address: new admin address
+
         Returns transaction hash.
         """
         tx = self.contract.functions.transferAdmin(address).buildTransaction()
@@ -131,8 +135,10 @@ class BaseContract:
 
     def add_operator(self, address):
         """Add given address to operators list.
+
         Args:
             address: new operator address
+
         Returns transaction hash.
         """
         tx = self.contract.functions.addOperator(address).buildTransaction()
@@ -140,8 +146,10 @@ class BaseContract:
 
     def remove_operator(self, address):
         """Remove given address from operators list.
+
         Args:
             address: operator address
+
         Returns transaction hash.
         """
         tx = self.contract.functions.removeOperator(address).buildTransaction()
@@ -149,8 +157,10 @@ class BaseContract:
 
     def add_alerter(self, address):
         """Add given address to alerters list.
+
         Args:
             address: new alerter address
+
         Returns transaction hash.
         """
         tx = self.contract.functions.addAlerter(address).buildTransaction()
@@ -158,8 +168,10 @@ class BaseContract:
 
     def remove_alerter(self, address):
         """Remove given address from alerters list.
+
         Args:
             address: alerter address
+
         Returns transaction hash.
         """
         tx = self.contract.functions.removeAlerter(address).buildTransaction()
@@ -174,8 +186,10 @@ class BaseContract:
 
     def send_transaction(self, tx):
         """Send a transaction using instance w3, account.
+
         Args:
             tx: transaction data
+
         Return transaction hash.
         """
         return send_transaction(self.w3, self.account, tx)
@@ -201,8 +215,10 @@ class ReserveContract(BaseContract):
 
     def get_balance(self, token):
         """Return balance of given token.
+
         Args:
             token: address of token to check balance
+
         Return:
             The balance of token.
         """
@@ -220,6 +236,7 @@ class ReserveContract(BaseContract):
 
     def approve_withdraw_address(self, address, token):
         """Allow given address to withdraw a specific token from reserve.
+
         Args:
             address: address to allow withdrawal
             token: token address
@@ -230,7 +247,8 @@ class ReserveContract(BaseContract):
         return self.send_transaction(tx)
 
     def disapprove_withdraw_address(self, address, token):
-        """Disallow an address to withdraw a specific token from reserve
+        """Disallow an address to withdraw a specific token from reserve.
+
         Args:
             address: address to disallow withdrawal
             token: token address
@@ -242,6 +260,7 @@ class ReserveContract(BaseContract):
 
     def withdraw(self, token, amount, dest):
         """Withdraw token from reserve to destination address.
+
         Args:
             token: token address
             amount: amount of token to withdraw
@@ -255,6 +274,7 @@ class ReserveContract(BaseContract):
 
     def set_contracts(self, network, rates, sanity_rates):
         """Update relevant address to reserve.
+
         Args:
             network: the address of KyberNetwork
             rates: the address of conversions rates contract
@@ -281,6 +301,7 @@ class ConversionRatesContract(BaseContract):
 
     def __init__(self, provider, account, address):
         """Create new ConversionRatesContract instance.
+
         Args:
             address: the address of smart contract
         """
@@ -290,7 +311,7 @@ class ConversionRatesContract(BaseContract):
     def get_buy_rate(self, token, qty):
         """Return the buying rate (ETH based). The rate might be vary with
         different quantity.
-        TODO: check if block_number is required
+
         Args:
             token: token address
             qty: the amount to buy
@@ -305,7 +326,7 @@ class ConversionRatesContract(BaseContract):
     def get_sell_rate(self, token, qty):
         """Return the selling rate (ETH based). The rate might be vary with
         different quantity.
-        TODO: check if block_number is needed.
+
         Args:
             token: token address
             qty: the amount of token to sell
@@ -319,8 +340,10 @@ class ConversionRatesContract(BaseContract):
 
     def get_token_indices(self, token):
         """Get token index in pricing contract compact data.
+
         Args:
             token: the token address
+
         Returns array index and field index of token in compact data.
         """
         if token not in self.token_indices:
@@ -331,10 +354,12 @@ class ConversionRatesContract(BaseContract):
 
     def build_price(self, token, buy, sell):
         """Calculate price data.
+
         Args:
             token: the token address
             buy: token buy price
             sell: token sell price
+
         Returns:
             token: the token address # TODO consider to remove this output
             compact_buy: the different between current current base buy and new
@@ -363,6 +388,7 @@ class ConversionRatesContract(BaseContract):
 
     def set_rates(self, token_addresses, buy_rates, sell_rates):
         """Setting rates for tokens.
+
         Args:
             token_addresses: list of token contract addresses supported by your
             reserve
@@ -559,9 +585,11 @@ class SanityRatesContract(BaseContract):
 
     def set_sanity_rates(self, tokens, rates):
         """Set the sanity rates for a list of tokens.
+
         Args:
             tokens: list of ERC20 token contract address
             rates: list of rates in ETH wei
+
         E.g:
             1 KNC = 0.002 ETH = 2000000000000000 wei
         """
@@ -577,9 +605,11 @@ class SanityRatesContract(BaseContract):
     def set_reasonable_diff(self, tokens, diff):
         """Set reasonable conversion rate difference in percentage. Any rate
         outside of this range is considered unreasonable.
+
         Args:
             tokens: list of ERC20 token contract address
             diff: list of reasonable difference in basis points (1bps = 0.01%)
+
         """
         tx = self.contract.functions.setReasonableDiff(
             tokens, diff
@@ -603,9 +633,11 @@ class Reserve:
 
     def __init__(self, provider, account, addresses):
         """Create a Reserve instance.
+
         Args:
             provider: web3 provider
             addresses: addresses of deployed smart contracts
+
         """
         self.reserve_contract = ReserveContract(
             provider, account, addresses.reserve)

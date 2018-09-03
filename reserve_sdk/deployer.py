@@ -22,6 +22,7 @@ class Deployer:
 
     def deploy(self, network_addr):
         """Deploy new reserve and pricing contracts.
+
         Args:
             network_addr: the address of network contracts.
 
