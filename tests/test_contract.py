@@ -507,30 +507,38 @@ class TestConversionRatesContract(unittest.TestCase):
         self.assertLess(abs((buy-new_buy_rates[0])/new_buy_rates[0]), bps)
 
     @role(operator)
-    def test_set_new_rate(self):
+    def test_set_new_rate_with_small_and_big_changes(self):
         """
-        Set rate
-        Set new_rate = rate * (1 + changes / 1000)
-        (changes is out of range -128...127 bps, 1 bps = 0.01%)
+        Scenario:
+            - Set base_rate for 2 tokens
+            - Set new_rate:
+                For the first token, the changes can not fit compact data.
+                For the second token, the new_rate has changes which fit compact
+                data.
 
         Expect:
-            compact_data = 0
-            basic_rate = new_rate
-            rate = new_rate
+            - For token 1:
+                compact_data = 0
+                basic_rate = new_rate
+            - For token 2:
+                compact_data = changes
+                basic_rate = base_rate
         """
-        token = tokens[0]
+
+        # Set base rates for 2 token
+        token_addresses = [token.address for token in tokens[:2]]
 
         # set rates -> consider as base rates
-        token_addresses = [token.address]
-        base_buy_rates = [token_wei(500, 18)]
-        base_sell_rates = [token_wei(0.00182, 18)]
+        base_buy_rates = [token_wei(500, 18), token_wei(400, 18)]
+        base_sell_rates = [token_wei(0.00182, 18), token_wei(0.00232, 18)]
 
         self.contract.set_rates(
             token_addresses, base_buy_rates, base_sell_rates
         )
 
-        buy_changes = [128 for _ in base_buy_rates]
-        sell_changes = [-129 for _ in base_sell_rates]
+        # Generate rate changes and set new rates
+        buy_changes = [128, random.randint(-128, 127)]
+        sell_changes = [-129, random.randint(-128, 127)]
 
         new_buy_rates = [
             int(rate * (1 + changes / 1000)) for rate, changes in
@@ -543,19 +551,19 @@ class TestConversionRatesContract(unittest.TestCase):
 
         self.contract.set_rates(token_addresses, new_buy_rates, new_sell_rates)
 
-        """Check base rates"""
+        # Check base rates
         self.assertEqual(
-            self.contract.get_basic_rate(token.address, buy=True),
+            self.contract.get_basic_rate(token_addresses[0], buy=True),
             new_buy_rates[0]
         )
         self.assertEqual(
-            self.contract.get_basic_rate(token.address, buy=False),
+            self.contract.get_basic_rate(token_addresses[0], buy=False),
             new_sell_rates[0]
         )
 
-        """Check compact rates"""
+        # Check compact rates first token
         _, _, compact_buy, compact_sell = self.contract.get_compact_data(
-            token.address)
+            token_addresses[0])
 
         compact_buy = int.from_bytes(
             compact_buy, byteorder='little', signed=True
@@ -567,11 +575,19 @@ class TestConversionRatesContract(unittest.TestCase):
         self.assertEqual(compact_buy, 0)
         self.assertEqual(compact_sell, 0)
 
-        """Check full rates"""
-        sell = self.contract.get_sell_rate(token.address, 1)
-        buy = self.contract.get_buy_rate(token.address, 1)
-        self.assertEqual(sell, new_sell_rates[0])
-        self.assertEqual(buy, new_buy_rates[0])
+        # Check compact rates second token
+        _, _, compact_buy, compact_sell = self.contract.get_compact_data(
+            token_addresses[1])
+
+        compact_buy = int.from_bytes(
+            compact_buy, byteorder='little', signed=True
+        )
+        compact_sell = int.from_bytes(
+            compact_sell, byteorder='little', signed=True
+        )
+
+        self.assertLessEqual(abs(compact_buy - buy_changes[1]), 1)
+        self.assertLessEqual(abs(compact_sell - sell_changes[1]), 1)
 
 
 class TestSanityRatesContract(unittest.TestCase):

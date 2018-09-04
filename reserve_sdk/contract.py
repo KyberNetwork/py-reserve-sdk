@@ -1,4 +1,5 @@
 from collections import namedtuple
+from concurrent import futures
 
 from web3 import Web3
 
@@ -307,6 +308,7 @@ class ConversionRatesContract(BaseContract):
         """
         super().__init__(provider, account, address, CONVERSION_RATES_CODE.abi)
         self.token_indices = {}
+        self.executor = futures.ThreadPoolExecutor(max_workers=4)
 
     def get_buy_rate(self, token, qty):
         """Return the buying rate (ETH based). The rate might be vary with
@@ -381,6 +383,8 @@ class ConversionRatesContract(BaseContract):
 
         return {
             'token': token,
+            'base_buy': compact_buy.base,
+            'base_sell': compact_sell.base,
             'compact_buy': compact_buy.compact,
             'compact_sell': compact_sell.compact,
             'base_changed': base_changed
@@ -412,50 +416,43 @@ class ConversionRatesContract(BaseContract):
             - no base_change exist
             - compact data not fit in a byte, out of range -128...127 bps
 
-        TODO improve performance to get token_indices and prices concurrently.
         """
-
-        # loop = asyncio.get_event_loop()
-
-        # token_indices = loop.run_until_complete(asyncio.gather(
-        #     *[self.get_token_indices(token) for token in token_addresses]
-        # ))
-
-        # prices = loop.run_until_complete(asyncio.gather(
-        #     *[self.build_price(token, buy, sell) for token, buy, sell in
-        #       zip(token_addresses, buy_rates, sell_rates)]
-        # ))
-
-        # loop.close()
 
         token_indices = {
             token: self.get_token_indices(token) for token in token_addresses
         }
 
-        prices = [
-            self.build_price(token, buy, sell) for token, buy, sell in
-            zip(token_addresses, buy_rates, sell_rates)
-        ]
+        prices = list(self.executor.map(lambda p: self.build_price(*p), zip(
+            token_addresses, buy_rates, sell_rates)))
 
-        base_changed = any([p['base_changed'] for p in prices])
+        tokens = []
+        base_buy = []
+        base_sell = []
+        for price in prices:
+            if price['base_changed']:
+                tokens.append(price['token'])
+                base_buy.append(price['base_buy'])
+                base_sell.append(price['base_sell'])
 
-        if base_changed:
+        compact_buy, compact_sell, indices = build_compact_price(
+            prices, token_indices)
+
+        if tokens:
             """Set base rate"""
             tx = self.contract.functions.setBaseRate(
-                token_addresses,
-                buy_rates,  # base buy
-                sell_rates,  # base sell
-                [],  # compact data
-                [],  # compact data
+                tokens,
+                base_buy,  # base buy
+                base_sell,  # base sell
+                compact_buy,  # compact data
+                compact_sell,  # compact data
                 self.w3.eth.blockNumber,  # most recent block number
-                [],  # indicies
+                indices,  # indicies
             ).buildTransaction()
         else:
             """Set compact rate"""
-            buy, sell, indices = build_compact_price(prices, token_indices)
             tx = self.contract.functions.setCompactData(
-                buy,
-                sell,
+                compact_buy,
+                compact_sell,
                 self.w3.eth.blockNumber,
                 indices
             ).buildTransaction()
