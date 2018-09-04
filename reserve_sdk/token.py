@@ -1,4 +1,4 @@
-from .utils import send_transaction
+from .utils import call_contract
 
 
 class Token():
@@ -13,6 +13,6 @@ class Token():
         return self.__contract.functions.balanceOf(address).call()
 
     def transfer(self, address, amount):
-        tx = self.__contract.functions.transfer(
-            address, amount).buildTransaction()
-        return send_transaction(self.__w3, self.__account, tx)
+        func = self.__contract.functions.transfer(
+            address, amount)
+        return call_contract(self.__w3, self.__account, func)

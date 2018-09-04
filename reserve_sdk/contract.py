@@ -5,7 +5,7 @@ from web3 import Web3
 
 from .contract_code import (
     RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
-from .utils import send_transaction, hexlify
+from .utils import hexlify, call_contract
 
 
 """Show token position in the compact data."""
@@ -24,10 +24,6 @@ def get_compact_data(rate, base):
     Returns:
         compact_data which include new base rate & compact value which is the
         different between rate and base in bps unit.
-
-    TODO consider to raise BaseChangedException to indicates that base rates
-    were changed, in this situation, we can only set base rates, not compact
-    data.
     """
     if base == 0:
         return CompactData(rate, 0)
@@ -53,8 +49,6 @@ def build_compact_price(prices, token_indices):
         buy: buy prices change in bps unit, encoded in hex
         sell: sell prices change in bps unit, encoded in hex
         indices: the index of block token in compact data on contract
-
-    TODO improve function documentation with example.
     """
     result = {}
 
@@ -122,8 +116,9 @@ class BaseContract:
 
         Returns transaction hash.
         """
-        tx = self.contract.functions.transferAdmin(address).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.transferAdmin(address)
+        )
 
     def claim_admin(self):
         """Claim admin privilege.
@@ -131,8 +126,9 @@ class BaseContract:
         this to works.
         Returns transaction hash.
         """
-        tx = self.contract.functions.claimAdmin().buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.claimAdmin()
+        )
 
     def add_operator(self, address):
         """Add given address to operators list.
@@ -142,8 +138,9 @@ class BaseContract:
 
         Returns transaction hash.
         """
-        tx = self.contract.functions.addOperator(address).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.addOperator(address)
+        )
 
     def remove_operator(self, address):
         """Remove given address from operators list.
@@ -153,8 +150,9 @@ class BaseContract:
 
         Returns transaction hash.
         """
-        tx = self.contract.functions.removeOperator(address).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.removeOperator(address)
+        )
 
     def add_alerter(self, address):
         """Add given address to alerters list.
@@ -164,8 +162,9 @@ class BaseContract:
 
         Returns transaction hash.
         """
-        tx = self.contract.functions.addAlerter(address).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.addAlerter(address)
+        )
 
     def remove_alerter(self, address):
         """Remove given address from alerters list.
@@ -175,8 +174,9 @@ class BaseContract:
 
         Returns transaction hash.
         """
-        tx = self.contract.functions.removeAlerter(address).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.removeAlerter(address)
+        )
 
     def change_account(self, account):
         """TODO: need to review this behaviour. Client could init an other
@@ -185,15 +185,15 @@ class BaseContract:
         self.account = account
         self.w3.eth.defaultAccount = account.address
 
-    def send_transaction(self, tx):
-        """Send a transaction using instance w3, account.
+    def call_contract_func(self, func):
+        """Send transaction to execute contract function.
 
         Args:
-            tx: transaction data
+            func: the contract function with parameters
 
-        Return transaction hash.
+        Returns transaction hash.
         """
-        return send_transaction(self.w3, self.account, tx)
+        return call_contract(self.w3, self.account, func)
 
 
 class ReserveContract(BaseContract):
@@ -227,13 +227,15 @@ class ReserveContract(BaseContract):
 
     def enable_trade(self):
         """Enable trading feature for reserve contract."""
-        tx = self.contract.functions.enableTrade().buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.enableTrade()
+        )
 
     def disable_trade(self):
         """Disable trading feature for reserve contract."""
-        tx = self.contract.functions.disableTrade().buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.disableTrade()
+        )
 
     def approve_withdraw_address(self, address, token):
         """Allow given address to withdraw a specific token from reserve.
@@ -242,10 +244,11 @@ class ReserveContract(BaseContract):
             address: address to allow withdrawal
             token: token address
         """
-        tx = self.contract.functions.approveWithdrawAddress(
-            token, address, True
-        ).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.approveWithdrawAddress(
+                token, address, True
+            )
+        )
 
     def disapprove_withdraw_address(self, address, token):
         """Disallow an address to withdraw a specific token from reserve.
@@ -254,10 +257,11 @@ class ReserveContract(BaseContract):
             address: address to disallow withdrawal
             token: token address
         """
-        tx = self.contract.functions.approveWithdrawAddress(
-            token, address, False
-        ).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.approveWithdrawAddress(
+                token, address, False
+            )
+        )
 
     def withdraw(self, token, amount, dest):
         """Withdraw token from reserve to destination address.
@@ -267,11 +271,9 @@ class ReserveContract(BaseContract):
             amount: amount of token to withdraw
             dest: destination address to receive the token
         """
-        tx = self.contract.functions.withdraw(
-            token, amount, dest).buildTransaction({
-                'gas': 3000000
-            })
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.withdraw(token, amount, dest)
+        )
 
     def set_contracts(self, network, rates, sanity_rates):
         """Update relevant address to reserve.
@@ -281,9 +283,9 @@ class ReserveContract(BaseContract):
             rates: the address of conversions rates contract
             sanity_rates: the address of sanity rates contract
         """
-        tx = self.contract.functions.setContracts(
-            network, rates, sanity_rates).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setContracts(network, rates, sanity_rates)
+        )
 
     def get_sanity_rates_address(self):
         return self.contract.functions.sanityRatesContract().call()
@@ -363,7 +365,7 @@ class ConversionRatesContract(BaseContract):
             sell: token sell price
 
         Returns:
-            token: the token address # TODO consider to remove this output
+            token: the token address
             compact_buy: the different between current current base buy and new
             buy price, in bps unit
             compact_sell: the different between current current base sell and
@@ -439,24 +441,28 @@ class ConversionRatesContract(BaseContract):
 
         if tokens:
             """Set base rate"""
-            tx = self.contract.functions.setBaseRate(
-                tokens,
-                base_buy,  # base buy
-                base_sell,  # base sell
-                compact_buy,  # compact data
-                compact_sell,  # compact data
-                self.w3.eth.blockNumber,  # most recent block number
-                indices,  # indicies
-            ).buildTransaction()
+            tx_hash = self.call_contract_func(
+                self.contract.functions.setBaseRate(
+                    tokens,
+                    base_buy,  # base buy
+                    base_sell,  # base sell
+                    compact_buy,  # compact data
+                    compact_sell,  # compact data
+                    self.w3.eth.blockNumber,  # most recent block number
+                    indices,  # indicies
+                )
+            )
         else:
             """Set compact rate"""
-            tx = self.contract.functions.setCompactData(
-                compact_buy,
-                compact_sell,
-                self.w3.eth.blockNumber,
-                indices
-            ).buildTransaction()
-        return self.send_transaction(tx)
+            tx_hash = self.call_contract_func(
+                self.contract.functions.setCompactData(
+                    compact_buy,
+                    compact_sell,
+                    self.w3.eth.blockNumber,
+                    indices
+                )
+            )
+        return tx_hash
 
     def get_basic_rate(self, token_address, buy=True):
         """Get basic rate from pricing contract."""
@@ -464,75 +470,81 @@ class ConversionRatesContract(BaseContract):
             token_address, buy).call()
 
     def enable_token_trade(self, token):
-        tx = self.contract.functions.enableTokenTrade(token).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.enableTokenTrade(token)
+        )
 
     def disable_token_trade(self, token):
-        tx = self.contract.functions.disableTokenTrade(
-            token).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.disableTokenTrade(token)
+        )
 
     def add_token(self, token):
-        tx = self.contract.functions.addToken(token).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.addToken(token)
+        )
 
     def set_valid_rate_duration_in_blocks(self, duration):
-        tx = self.contract.functions.setValidRateDurationInBlocks(
-            duration
-        ).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setValidRateDurationInBlocks(
+                duration
+            )
+        )
 
     def set_token_control_info(self,
                                token,
                                minimal_record_resolution,
                                max_per_block_imbalance,
                                max_total_imbalance):
-
-        tx = self.contract.functions.setTokenControlInfo(
-            token,
-            minimal_record_resolution,
-            max_per_block_imbalance,
-            max_total_imbalance
-        ).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setTokenControlInfo(
+                token,
+                minimal_record_resolution,
+                max_per_block_imbalance,
+                max_total_imbalance
+            )
+        )
 
     def set_qty_step_function(self, token, x_buy, y_buy, x_sell, y_sell):
-        tx = self.contract.functions.setQtyStepFunction(
-            token,
-            x_buy,
-            y_buy,
-            x_sell,
-            y_sell
-        ).buildTransaction({'gas': 5000000})
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setQtyStepFunction(
+                token,
+                x_buy,
+                y_buy,
+                x_sell,
+                y_sell
+            )
+        )
 
     def set_imbalance_step_function(self, token, x_buy, y_buy, x_sell, y_sell):
-        tx = self.contract.functions.setImbalanceStepFunction(
-            token,
-            x_buy,
-            y_buy,
-            x_sell,
-            y_sell
-        ).buildTransaction({'gas': 5000000})
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setImbalanceStepFunction(
+                token,
+                x_buy,
+                y_buy,
+                x_sell,
+                y_sell
+            )
+        )
 
     def set_compact_data(self, buy, sell, indices):
-        tx = self.contract.functions.setCompactData(
-            buy,
-            sell,
-            self.w3.eth.blockNumber,
-            indices
-        ).buildTransaction({'gas': 5000000})
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setCompactData(
+                buy,
+                sell,
+                self.w3.eth.blockNumber,
+                indices
+            )
+        )
 
     def get_compact_data(self, token):
         return self.contract.functions.getCompactData(token).call()
 
     def set_reserve_address(self, reserve_addr):
         """Update reserve address."""
-        tx = self.contract.functions.setReserveAddress(
-            reserve_addr).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setReserveAddress(reserve_addr)
+        )
 
     def get_reserve_address(self):
         return self.contract.functions.reserveContract().call()
@@ -590,10 +602,9 @@ class SanityRatesContract(BaseContract):
         E.g:
             1 KNC = 0.002 ETH = 2000000000000000 wei
         """
-        tx = self.contract.functions.setSanityRates(
-            tokens, rates
-        ).buildTransaction({'gas': 5000000})
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setSanityRates(tokens, rates)
+        )
 
     def get_sanity_rates(self, src, dst):
         """Get the sanity rates for 1 token vs. ETH."""
@@ -608,10 +619,9 @@ class SanityRatesContract(BaseContract):
             diff: list of reasonable difference in basis points (1bps = 0.01%)
 
         """
-        tx = self.contract.functions.setReasonableDiff(
-            tokens, diff
-        ).buildTransaction()
-        return self.send_transaction(tx)
+        return self.call_contract_func(
+            self.contract.functions.setReasonableDiff(tokens, diff)
+        )
 
     def get_reasonable_diff_in_bps(self, token):
         """Get the reasonable difference in basis points for token."""

@@ -1,15 +1,20 @@
 import binascii
 
 
-def send_transaction(w3, account, tx):
-    """Sign and send transaction.
+def call_contract(w3, account, func):
+    """Send transaction to execute smart contract function.
+
     Args:
         w3: web3 instance
         account: local account
-        txn: txn data
-    Returns transaction receipt.
+        func: the smart contract function
+
+    Returns transaction hash.
     """
-    tx['nonce'] = w3.eth.getTransactionCount(account.address)
+    tx = func.buildTransaction({
+        'nonce': w3.eth.getTransactionCount(account.address),
+        'gas': func.estimateGas()
+    })
     signed_tx = w3.eth.account.signTransaction(tx, account.privateKey)
     tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
     return tx_hash
@@ -31,8 +36,8 @@ def deploy_contract(w3, account, contract_code, contract_args):
         abi=contract_code.abi,
         bytecode=contract_code.bin
     )
-    tx = contract.constructor(*contract_args).buildTransaction()
-    tx_hash = send_transaction(w3, account, tx)
+    func = contract.constructor(*contract_args)
+    tx_hash = call_contract(w3, account, func)
     tx_receipt = get_transaction_receipt(w3, tx_hash)
     return tx_receipt['contractAddress']
 

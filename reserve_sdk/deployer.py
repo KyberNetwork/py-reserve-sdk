@@ -6,7 +6,7 @@ from .contract_code import (
     RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
 from .addresses import Addresses
 from .contract import Reserve
-from .utils import send_transaction, get_transaction_receipt, deploy_contract
+from .utils import get_transaction_receipt, deploy_contract
 
 
 class Deployer:
@@ -60,23 +60,6 @@ class Deployer:
             conversion_rates_addr,
             sanity_rates_addr
         )
-
-        """
-        TODO
-        Reserve
-        - Whitelist deposit address: reserve approve withdraw address
-        - Set permissions
-        Rates:
-        - Add token to conversion_rates_addr
-        - Set valid duration block
-        - Set reserve address [DONE]
-        - Set control info
-        - Enable token trade
-        - Add temporary operator
-        - Set imbalance function to 0
-        - Remove temporary operator
-        - Set permissions
-        """
 
         # Link addresses between reserve contracts
         # Consider to move this part to Reserve class
