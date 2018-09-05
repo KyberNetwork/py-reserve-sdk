@@ -179,9 +179,7 @@ class BaseContract:
         )
 
     def change_account(self, account):
-        """TODO: need to review this behaviour. Client could init an other
-        instance of contract with new account.
-        """
+        """Set account to sign tx when execute contract functions."""
         self.account = account
         self.w3.eth.defaultAccount = account.address
 
