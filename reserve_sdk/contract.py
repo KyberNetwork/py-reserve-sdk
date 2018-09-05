@@ -10,7 +10,7 @@ from .utils import hexlify, call_contract
 
 """Show token position in the compact data."""
 TokenIndex = namedtuple('TokenIndex', ('array_idx', 'field_idx'))
-CompactData = namedtuple('CompactData', ('base', 'compact'))
+CompactData = namedtuple('CompactData', ('base', 'compact', 'base_changed'))
 
 
 def get_compact_data(rate, base):
@@ -26,16 +26,16 @@ def get_compact_data(rate, base):
         different between rate and base in bps unit.
     """
     if base == 0:
-        return CompactData(rate, 0)
+        return CompactData(rate, 0, base_changed=(base != rate))
 
     compact = int((rate/base - 1) * 1000)
     if compact <= -128 or compact >= 127:  # not fit in a byte
-        return CompactData(rate, 0)
+        return CompactData(rate, 0, base_changed=True)
     else:
         # handle negative value to convert to byte
         if compact < 0:
             compact += 256
-        return CompactData(base, compact)
+        return CompactData(base, compact, base_changed=False)
 
 
 def build_compact_price(prices, token_indices):
@@ -380,8 +380,7 @@ class ConversionRatesContract(BaseContract):
         base_sell = self.get_basic_rate(token, False)
         compact_sell = get_compact_data(sell, base_sell)
 
-        base_changed = (compact_buy.base != base_buy) or (
-            compact_sell.base != base_sell)
+        base_changed = compact_buy.base_changed or compact_sell.base_changed
 
         return {
             'token': token,
