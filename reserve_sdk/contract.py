@@ -577,6 +577,7 @@ class ConversionRatesContract(BaseContract):
             max_per_block_imbalance, max_total_imbalance
         )
         self.enable_token_trade(token)
+        self.get_token_indices(token)
 
 
 class SanityRatesContract(BaseContract):
