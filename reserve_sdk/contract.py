@@ -421,9 +421,10 @@ class ConversionRatesContract(BaseContract):
 
         """
 
-        token_indices = {
-            token: self.get_token_indices(token) for token in token_addresses
-        }
+        token_indices = {}
+        for idx, indices in enumerate(self.executor.map(
+                self.get_token_indices, token_addresses)):
+            token_indices[token_addresses[idx]] = indices
 
         prices = list(self.executor.map(lambda p: self.build_price(*p), zip(
             token_addresses, buy_rates, sell_rates)))
