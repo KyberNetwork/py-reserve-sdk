@@ -310,32 +310,36 @@ class ConversionRatesContract(BaseContract):
         self.token_indices = {}
         self.executor = futures.ThreadPoolExecutor(max_workers=4)
 
-    def get_buy_rate(self, token, qty):
+    def get_buy_rate(self, token, qty, block_number=0):
         """Return the buying rate (ETH based). The rate might be vary with
         different quantity.
 
         Args:
             token: token address
             qty: the amount to buy
+            block_number: the block number to get rate from, default value 0
+            means latest block number
         """
         return self.contract.functions.getRate(
             token,
-            self.w3.eth.blockNumber,  # most recent block
+            block_number,
             True,  # buy = True
             qty
         ).call()
 
-    def get_sell_rate(self, token, qty):
+    def get_sell_rate(self, token, qty, block_number=0):
         """Return the selling rate (ETH based). The rate might be vary with
         different quantity.
 
         Args:
             token: token address
             qty: the amount of token to sell
+            block_number: the block number to get rate from, default value 0
+            means latest block number
         """
         return self.contract.functions.getRate(
             token,
-            self.w3.eth.blockNumber,  # most recent block
+            block_number,
             False,  # buy = False -> sell
             qty
         ).call()
