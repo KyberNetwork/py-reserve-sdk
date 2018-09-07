@@ -3,8 +3,8 @@ Operation Guide
 
 Initialize
 ----------
-Create a reserve instance given the deployed reserve contract addresses,
-provider, account::
+Create a :class:`Reserve <reserve_sdk.Reserve>` given the deployed 
+reserve contract addresses, provider, account::
 
     >> from web3 import Web3, HTTPProvider
     >> from reserve_sdk import Addresses, Reserve

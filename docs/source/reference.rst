@@ -2,13 +2,16 @@ Reference
 =========
 
 .. autoclass:: reserve_sdk.Reserve
-   :members:
+    :members:
 
 .. autoclass:: reserve_sdk.ReserveContract
-   :members:
+    :members:
 
 .. autoclass:: reserve_sdk.ConversionRatesContract
-   :members:
+    :members:
 
 .. autoclass:: reserve_sdk.SanityRatesContract
-   :members:
+    :members:
+
+.. autoclass:: reserve_sdk.Addresses
+    :members:
