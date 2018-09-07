@@ -1,7 +1,8 @@
 Deployment Guide
 ================
 
-Deploy reserve contract given the provider, account. The returned addresses
+Deploy reserve contract given the provider, account. The returned 
+:class:`Addresses <reserve_sdk.Addresses>`
 contains reserve contract, pricing contract and sanity contract address::
 
     >> from web3 import Web3, HTTPProvider
@@ -13,3 +14,4 @@ contains reserve contract, pricing contract and sanity contract address::
 
     >> d = Deployer(provider, account)
     >> addresses = d.deploy('kyber-network-address')
+    Addresses(reserve='0x...', conversion_rates='0x...', sanity_rates='0x...')

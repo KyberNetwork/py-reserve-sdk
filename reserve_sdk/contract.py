@@ -347,15 +347,18 @@ class ConversionRatesContract(BaseContract):
         :arg list(int) buy: token buy price
         :arg list(int) sell: token sell price
 
-        Returns:
-            token: the token address
-            compact_buy: the different between current current base buy and new
-            buy price, in bps unit
-            compact_sell: the different between current current base sell and
-            new sell price, in bps unit
-            base_changed: this value is True if compact cant fit in a byte, in
-            that situation, need to set new base rate. Otherwise, the compact
-            price will be set.
+        :return: token, base buy and sell, compact buy and sell, base_changed
+
+            * token: the token address
+            * base_buy: the base buy price
+            * compact_buy: the different between current base buy and \
+                new buy price, in bps unit
+            * base_sell: the base sell price
+            * compact_sell: the different between current base sell and \
+                new sell price, in bps unit
+            * base_changed: if compact can not fit in a byte, we need to set \
+                new base rate. Otherwise, the compact price will be set
+
         """
         base_buy = self.get_basic_rate(token, True)
         compact_buy = get_compact_data(buy, base_buy)
