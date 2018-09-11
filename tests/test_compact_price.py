@@ -1,7 +1,7 @@
 import random
 
-from reserve_sdk.contract import get_compact_data, build_compact_price
-from reserve_sdk.contract import TokenIndex, CompactData
+from reserve_sdk.contracts import get_compact_data, build_compact_price
+from reserve_sdk.contracts import TokenIndex, CompactData
 from reserve_sdk.utils import hexlify
 
 

@@ -5,8 +5,7 @@ from web3 import Web3
 from .contract_code import (
     RESERVE_CODE, CONVERSION_RATES_CODE, SANITY_RATES_CODE)
 from .addresses import Addresses
-from .contract import Reserve
-from .utils import get_transaction_receipt, deploy_contract
+from .utils import deploy_contract
 
 
 class Deployer:
@@ -23,15 +22,8 @@ class Deployer:
     def deploy(self, network_addr):
         """Deploy new reserve and pricing contracts.
 
-        Args:
-            network_addr: the address of network contracts.
-
-        Steps:
-            1. Deploy ConversionRates contract
-            2. Deploy Reserve contract
-
-        Returns:
-            addresses: deployed reserve addresses set.
+        :arg str network_addr: The address of network contract
+        :return: :class:`Reserve Contract Addresses <reserve_sdk.Addresses>`
         """
 
         conversion_rates_addr = deploy_contract(
@@ -55,20 +47,8 @@ class Deployer:
             [self.__acct.address]
         )
 
-        addresses = Addresses(
+        return Addresses(
             reserve_addr,
             conversion_rates_addr,
             sanity_rates_addr
         )
-
-        # Link addresses between reserve contracts
-        # Consider to move this part to Reserve class
-        reserve = Reserve(self.__provider, self.__acct, addresses)
-        reserve.pricing.set_reserve_address(reserve_addr)
-        reserve.fund.set_contracts(
-            network_addr,
-            conversion_rates_addr,
-            sanity_rates_addr
-        )
-
-        return addresses

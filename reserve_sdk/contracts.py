@@ -457,6 +457,11 @@ class ConversionRatesContract(BaseContract):
         )
 
     def set_valid_rate_duration_in_blocks(self, duration):
+        """Set the duration for rates to be expired, in block unit.
+
+        :arg int duration: the time in blocks that conversion rates will \
+        expire since the last price update.
+        """
         return self.call_contract_func(
             self.contract.functions.setValidRateDurationInBlocks(
                 duration
@@ -513,40 +518,22 @@ class ConversionRatesContract(BaseContract):
         return self.contract.functions.getCompactData(token).call()
 
     def set_reserve_address(self, reserve_addr):
-        """Update reserve address."""
+        """Update reserve contract address."""
         return self.call_contract_func(
             self.contract.functions.setReserveAddress(reserve_addr)
         )
 
     def get_reserve_address(self):
+        """Returns reserve contract address."""
         return self.contract.functions.reserveContract().call()
 
-    def get_step_function_data(self, token, command, param):
+    def get_steps_function_data(self, token, command, param):
+        """Get steps function data from contract."""
         return self.contract.functions.getStepFunctionData(
             token,
             command,
             param
         ).call()
-
-    def add_new_token(self, token, minimal_record_resolution,
-                      max_per_block_imbalance, max_total_imbalance):
-        """Add new token to pricing contract.
-
-        :arg str token: The token address
-        :arg int minimal_record_resolution: Recommended value is the token unit
-            equivalent of $0.0001
-        :arg int max_per_block_imbalance: The maximum token wei amount of
-            net absolute (+/-) change for a token in a block
-        :arg int max_total_imbalance: The token amount of the net token change
-            that happens between 2 prices updates
-        """
-        self.add_token(token)
-        self.set_token_control_info(
-            token, minimal_record_resolution,
-            max_per_block_imbalance, max_total_imbalance
-        )
-        self.enable_token_trade(token)
-        self.get_token_indices(token)
 
 
 class SanityRatesContract(BaseContract):
@@ -592,29 +579,3 @@ class SanityRatesContract(BaseContract):
     def get_reasonable_diff_in_bps(self, token):
         """Get the reasonable difference in basis points for token."""
         return self.contract.functions.reasonableDiffInBps(token).call()
-
-
-class Reserve:
-    """Reserve represent a KyberNetwork reserve SDK.
-
-    A wrapper to interact with reserve contracts, including:
-
-        * Reserve operations
-        * Get/Set pricing
-        * Withdraw funds
-        * Enable/Disable trading function
-    """
-
-    def __init__(self, provider, account, addresses):
-        """Create a Reserve instance.
-
-        :arg provider: web3 provider
-        :arg addresses: addresses of deployed smart contracts
-        """
-        self.fund = ReserveContract(
-            provider, account, addresses.reserve)
-        self.pricing = ConversionRatesContract(
-            provider, account, addresses.conversion_rates)
-        self.sanity = SanityRatesContract(
-            provider, account, addresses.sanity_rates
-        )
