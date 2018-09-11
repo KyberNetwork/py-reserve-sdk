@@ -1,56 +1,26 @@
 import unittest
-import json
-import os
-from functools import wraps
 import random
+from functools import wraps
 
-from eth_tester import EthereumTester, PyEVMBackend
-from web3 import Web3, EthereumTesterProvider
+from web3 import Web3
 
-from reserve_sdk import Deployer, ReserveContract, Reserve
-from reserve_sdk.utils import deploy_contract, token_wei
-from reserve_sdk.contract_code import ContractCode
-from reserve_sdk.token import Token
+from reserve_sdk import (
+    Reserve, Deployer,
+    ReserveContract, ConversionRatesContract, SanityRatesContract
+)
+from reserve_sdk.utils import token_wei
+from .utils import (
+    NETWORK_ADDR, provider, tokens,
+    test_accounts
+)
 
 random.seed(0)
 
-NETWORK_ADDR = '0x91a502C678605fbCe581eae053319747482276b9'
-
-backend = PyEVMBackend()
-tester = EthereumTester(backend)
-provider = EthereumTesterProvider(tester)
-w3 = Web3(provider)
-
-test_accts = []
-for key in backend.account_keys:
-    test_accts.append(w3.eth.account.privateKeyToAccount(key.to_hex()))
-
-deployer, admin_1, admin_2, operator, alerter = test_accts[:5]
-admin = deployer
-
-# deploy reserve contracts
-d = Deployer(provider, deployer)
-addresses = d.deploy(NETWORK_ADDR)
-reserve = Reserve(provider, deployer, addresses)
-
-# deploy test tokens
-token_code_file_path = os.path.join(os.path.dirname(__file__),
-                                    'erc20_token_code.json')
-
-with open(token_code_file_path) as f:
-    token_code = json.load(f)
-    erc20_token_code = ContractCode(
-        abi=token_code['abi'], bin=token_code['bytecode'])
-
-tokens = []
-for i in range(3):
-    token_addr = deploy_contract(
-        w3,
-        deployer,
-        erc20_token_code,
-        [str(i), str(i), 18]
-    )
-    tokens.append(Token(token_addr, erc20_token_code.abi, w3, deployer))
+admin, admin_1, admin_2, operator, operator_1, alerter, alerter_1 = \
+    test_accounts[:7]
+deployer = Deployer(provider, admin)
+addresses = deployer.deploy(NETWORK_ADDR)
+reserve = Reserve(provider, admin, addresses)
 
 
 def role(account):
@@ -73,7 +43,7 @@ class TestBaseContract(unittest.TestCase):
         self.contract = reserve.fund
 
     def test_contract_admin_is_sender(self):
-        self.assertEqual(self.contract.admin(), deployer.address)
+        self.assertEqual(self.contract.admin(), admin.address)
 
     def test_contract_pending_admin(self):
         self.assertNotEqual(self.contract.pending_admin(), '')
@@ -84,16 +54,17 @@ class TestBaseContract(unittest.TestCase):
     def test_get_contract_alerters(self):
         self.assertEqual(type(self.contract.alerters()), list)
 
+    @role(admin)
     def test_transfer_admin(self):
         self.contract.transfer_admin(admin_2.address)
         self.assertIn(admin_2.address, self.contract.pending_admin())
 
+    @role(admin)
     def test_claim_admin(self):
         """
-        Deployer is the current admin.
         This test will transfer admin to admin_1, check if admin_1 in pending
         admin. Then admin_1 claim admin to be the contract admin.
-        At last, the admin_1 transfer admin back to deployer.
+        At last, the admin_1 transfer admin back to the previous admin.
         """
         self.contract.transfer_admin(admin_1.address)
         self.assertIn(admin_1.address, self.contract.pending_admin())
@@ -101,41 +72,49 @@ class TestBaseContract(unittest.TestCase):
         self.contract.claim_admin()
         self.assertEqual(self.contract.admin(), admin_1.address)
 
-        self.contract.transfer_admin(deployer.address)
-        self.contract.change_account(deployer)
+        self.contract.transfer_admin(admin.address)
+        self.contract.change_account(admin)
         self.contract.claim_admin()
-        self.assertEqual(self.contract.admin(), deployer.address)
+        self.assertEqual(self.contract.admin(), admin.address)
 
+    @role(admin)
     def test_add_and_remove_operator(self):
         # test add new operator to contract
-        self.contract.add_operator(operator.address)
-        self.assertIn(operator.address, self.contract.operators())
+        self.contract.add_operator(operator_1.address)
+        self.assertIn(operator_1.address, self.contract.operators())
 
         # test remove operator to contract
-        self.contract.remove_operator(operator.address)
-        self.assertNotIn(operator.address, self.contract.operators())
+        self.contract.remove_operator(operator_1.address)
+        self.assertNotIn(operator_1.address, self.contract.operators())
 
+    @role(admin)
     def test_add_and_remove_alerter(self):
         # add new alerter to contract
-        self.contract.add_alerter(alerter.address)
-        self.assertIn(alerter.address, self.contract.alerters())
+        self.contract.add_alerter(alerter_1.address)
+        self.assertIn(alerter_1.address, self.contract.alerters())
 
         # remove the alerter from contract
-        self.contract.remove_alerter(alerter.address)
-        self.assertNotIn(alerter.address, self.contract.alerters())
+        self.contract.remove_alerter(alerter_1.address)
+        self.assertNotIn(alerter_1.address, self.contract.alerters())
 
 
-class TestReserveContract(unittest.TestCase):
+class TestReserveContract(TestBaseContract):
 
     @classmethod
     def setUpClass(cls):
         reserve.fund.add_operator(operator.address)
         reserve.fund.add_alerter(alerter.address)
         for token in tokens:
-            token.transfer(addresses.reserve, 5000 * 10**18)
+            token.transfer(addresses.reserve, token_wei(5000, 18))
+            reserve.add_new_token(
+                token=token.address,
+                minimal_record_resolution=token_wei(0.0001, 18),
+                max_per_block_imbalance=token_wei(439.79, 18),
+                max_total_imbalance=token_wei(922.36, 18)
+            )
 
     def setUp(self):
-        self.contract = reserve.fund
+        self.contract = ReserveContract(provider, admin, addresses.reserve)
 
     def test_get_balance(self):
         self.assertIsInstance(
@@ -144,7 +123,7 @@ class TestReserveContract(unittest.TestCase):
         )
 
     def test_link_with_new_contract_addresses(self):
-        new_addresses = d.deploy(NETWORK_ADDR)
+        new_addresses = deployer.deploy(NETWORK_ADDR)
 
         self.contract.set_contracts(
             NETWORK_ADDR,
@@ -187,7 +166,7 @@ class TestReserveContract(unittest.TestCase):
     def test_withdraw_token_from_reserve(self):
         token = tokens[0]
         blc = token.balanceOf(operator.address)
-        self.contract.change_account(deployer)
+        self.contract.change_account(admin)
         self.contract.approve_withdraw_address(
             operator.address, token.address
         )
@@ -206,35 +185,23 @@ class TestReserveContract(unittest.TestCase):
     def test_disable_trade_by_alerter(self):
         self.contract.disable_trade()
         self.assertFalse(self.contract.trade_enabled())
-        self.contract.change_account(deployer)
+        self.contract.change_account(admin)
 
 
-class TestConversionRatesContract(unittest.TestCase):
+class TestConversionRatesContract(TestBaseContract):
 
     @classmethod
     def setUpClass(cls):
         reserve.pricing.add_operator(operator.address)
         reserve.pricing.set_valid_rate_duration_in_blocks(60)
-        reserve.pricing.add_new_token(
-            token=tokens[0].address,
-            minimal_record_resolution=token_wei(0.0001, 18),
-            max_per_block_imbalance=token_wei(439.79, 18),
-            max_total_imbalance=token_wei(922.36, 18)
-        )
-
-        reserve.pricing.add_new_token(
-            token=tokens[1].address,
-            minimal_record_resolution=token_wei(0.0001, 18),
-            max_per_block_imbalance=token_wei(439.79, 18),
-            max_total_imbalance=token_wei(922.36, 18)
-        )
 
     def setUp(self):
-        self.contract = reserve.pricing
+        self.contract = ConversionRatesContract(
+            provider, admin, addresses.conversion_rates)
 
-    @role(deployer)
+    @role(admin)
     def test_link_with_new_reserve_contract(self):
-        new_address = d.deploy(NETWORK_ADDR)
+        new_address = deployer.deploy(NETWORK_ADDR)
 
         self.contract.set_reserve_address(new_address.reserve)
         self.assertEqual(
@@ -302,40 +269,40 @@ class TestConversionRatesContract(unittest.TestCase):
         )
 
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 0, 0),
+            self.contract.get_steps_function_data(token.address, 0, 0),
             len(x_buy)
         )
         for idx, step in enumerate(x_buy):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 1, idx),
+                self.contract.get_steps_function_data(token.address, 1, idx),
                 step
             )
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 2, 0),
+            self.contract.get_steps_function_data(token.address, 2, 0),
             len(y_buy)
         )
         for idx, impact in enumerate(y_buy):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 3, idx),
+                self.contract.get_steps_function_data(token.address, 3, idx),
                 impact
             )
 
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 4, 0),
+            self.contract.get_steps_function_data(token.address, 4, 0),
             len(x_sell)
         )
         for idx, step in enumerate(x_sell):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 5, idx),
+                self.contract.get_steps_function_data(token.address, 5, idx),
                 step
             )
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 6, 0),
+            self.contract.get_steps_function_data(token.address, 6, 0),
             len(y_sell)
         )
         for idx, impact in enumerate(y_sell):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 7, idx),
+                self.contract.get_steps_function_data(token.address, 7, idx),
                 impact
             )
 
@@ -356,40 +323,40 @@ class TestConversionRatesContract(unittest.TestCase):
         )
 
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 8, 0),
+            self.contract.get_steps_function_data(token.address, 8, 0),
             len(x_buy)
         )
         for idx, step in enumerate(x_buy):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 9, idx),
+                self.contract.get_steps_function_data(token.address, 9, idx),
                 step
             )
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 10, 0),
+            self.contract.get_steps_function_data(token.address, 10, 0),
             len(y_buy)
         )
         for idx, impact in enumerate(y_buy):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 11, idx),
+                self.contract.get_steps_function_data(token.address, 11, idx),
                 impact
             )
 
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 12, 0),
+            self.contract.get_steps_function_data(token.address, 12, 0),
             len(x_sell)
         )
         for idx, step in enumerate(x_sell):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 13, idx),
+                self.contract.get_steps_function_data(token.address, 13, idx),
                 step
             )
         self.assertEqual(
-            self.contract.get_step_function_data(token.address, 14, 0),
+            self.contract.get_steps_function_data(token.address, 14, 0),
             len(y_sell)
         )
         for idx, impact in enumerate(y_sell):
             self.assertEqual(
-                self.contract.get_step_function_data(token.address, 15, idx),
+                self.contract.get_steps_function_data(token.address, 15, idx),
                 impact
             )
 
@@ -433,7 +400,7 @@ class TestConversionRatesContract(unittest.TestCase):
             token_wei(500, 18) * (1 - 30 * 0.01 / 100)
         )
 
-    @unittest.skip('need to perform trade action')
+    @unittest.skip('need to perform trade action ')
     def test_rate_with_imbalance_step_function(self):
         pass
 
@@ -590,7 +557,7 @@ class TestConversionRatesContract(unittest.TestCase):
         self.assertLessEqual(abs(compact_sell - sell_changes[1]), 1)
 
 
-class TestSanityRatesContract(unittest.TestCase):
+class TestSanityRatesContract(TestBaseContract):
 
     @classmethod
     def setUpClass(cls):
@@ -598,7 +565,8 @@ class TestSanityRatesContract(unittest.TestCase):
         reserve.sanity.add_alerter(alerter.address)
 
     def setUp(self):
-        self.contract = reserve.sanity
+        self.contract = SanityRatesContract(
+            provider, admin, addresses.sanity_rates)
 
     @role(operator)
     def test_set_get_sanity_rates(self):

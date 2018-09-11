@@ -15,3 +15,8 @@ contains reserve contract, pricing contract and sanity contract address::
     >> d = Deployer(provider, account)
     >> addresses = d.deploy('kyber-network-address')
     Addresses(reserve='0x...', conversion_rates='0x...', sanity_rates='0x...')
+
+Methods
+-------
+
+* :meth:`Deploy new reserve <reserve_sdk.Deployer.deploy>`
